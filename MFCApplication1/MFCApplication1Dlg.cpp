@@ -480,7 +480,7 @@ void CMFCApplication1Dlg::ShowChildList(const int& nItemIndex)
     m_staPath.SetWindowText(strFilePath);
 }
 
-void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName)
+void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName, BOOL bForce)
 {
     m_listFiles.DeleteAllItems();
     m_mapListItemDatas.clear();
@@ -507,7 +507,7 @@ void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString
         if (CNTFSHelper::GetInstance()->SetCurDriverInfo(strDriverName))
         {
             BOOL bSuc = ui64FileNum == m_ui64CurFileNum;
-            if (!bSuc || bDriverChange)
+            if (bForce || !bSuc || bDriverChange)
             {
                 // 重刷下界面，因为下面操作有卡主界面风险，先刷一下，再设置鼠标等待状态，看着正常点
                 BeginWaitCursor();
@@ -846,7 +846,34 @@ void CMFCApplication1Dlg::OnDelete()
         if (m_mapListItemDatas.find(nItem) != m_mapListItemDatas.end())
         {
             DeleteFile(m_mapListItemDatas[nItem].strFilePath);
-            ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+            CString strParentPath;
+            if (CNTFSHelper::GetInstance()->GetFilePathByFileNum(m_ui64CurFileNum, strParentPath))
+            {
+                while (true)
+                {
+                    m_uiCurChildDirNum = 0;
+                    m_vecCurChildAttrInfos.clear();
+                    if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
+                    {
+                        BOOL bQuit = FALSE;
+                        for (auto info : m_vecCurChildAttrInfos)
+                        {
+                            UINT64 ui64ParentFileNum = 0;
+                            if (CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(info.ui64FileUniNum, ui64ParentFileNum) && ui64ParentFileNum != m_ui64CurFileNum)
+                            {
+                                bQuit = TRUE;
+                                break;
+                            }
+                        }
+                        if (!bQuit)
+                        {
+                            ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+                            break;
+                        }
+                    }
+                    Sleep(100);
+                }
+            }
         }
     }
 }
@@ -945,12 +972,14 @@ void CMFCApplication1Dlg::OnTie()
     if (m_ui64SrcFileSize > 4 * 1024 * 1024)
     {
         CCopyProgressWnd copyProgressWnd(this);
-        copyProgressWnd.SetCopyInfo(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
+        copyProgressWnd.SetCopyInfo(m_ui64SrcFileNum, m_ui64SrcFileSize, m_strSrcFilePath, szPath);
         bSuc = IDOK == copyProgressWnd.DoModal();
     }
     else
     {
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath.Mid(0, 1));
         bSuc = CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath[0]));
     }
 
     if (bSuc)
@@ -958,6 +987,22 @@ void CMFCApplication1Dlg::OnTie()
         if (m_bCut)
         {
             DeleteFile(m_strSrcFilePath);
+        }
+        while (true)
+        {
+            m_uiCurChildDirNum = 0;
+            m_vecCurChildAttrInfos.clear();
+            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
+            {
+                for (auto info : m_vecCurChildAttrInfos)
+                {
+                    if (info.strFilePath.Compare(szPath) == 0)
+                    {
+                        break;
+                    }
+                }
+            }
+            Sleep(100);
         }
         ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
     }
@@ -1068,12 +1113,14 @@ void CMFCApplication1Dlg::OnTie2()
     if (m_ui64SrcFileSize > 4 * 1024 * 1024)
     {
         CCopyProgressWnd copyProgressWnd(this);
-        copyProgressWnd.SetCopyInfo(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
+        copyProgressWnd.SetCopyInfo(m_ui64SrcFileNum, m_ui64SrcFileSize, m_strSrcFilePath, szPath);
         bSuc = IDOK == copyProgressWnd.DoModal();
     }
     else
     {
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath.Mid(0, 1));
         bSuc = CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath[0]));
     }
 
     if (bSuc)
@@ -1081,6 +1128,30 @@ void CMFCApplication1Dlg::OnTie2()
         if (m_bCut)
         {
             DeleteFile(m_strSrcFilePath);
+        }
+        // 这里可能有个文件记录更新延时的问题，就是文件已经创建成功了，但是文件记录还没更新，获取到的不对，
+        // 这里要一直刷新，直到文件记录获取成功为止
+        while (true)
+        {
+            m_uiCurChildDirNum = 0;
+            m_vecCurChildAttrInfos.clear();
+            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
+            {
+                BOOL bFinish = FALSE;
+                for (auto info : m_vecCurChildAttrInfos)
+                {
+                    if (info.strFilePath.Compare(szPath) == 0)
+                    {
+                        bFinish = TRUE;
+                        break;
+                    }
+                }
+                if (bFinish)
+                {
+                    break;
+                }
+            }
+            Sleep(100);
         }
         ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
     }

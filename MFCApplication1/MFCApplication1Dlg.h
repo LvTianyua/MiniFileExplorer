@@ -85,7 +85,7 @@ protected:
     void AddOneListItem(const FileAttrInfo& fileAttrInfo, const CString& strDriverName);
     // 根据当前目录文件参考号展示全部子项list
     void ShowChildList(const int& nItemIndex);
-    void ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName);
+    void ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName, BOOL bForce = FALSE);
 
     // SYSTIME转CString
     CString TimeToString(const SYSTEMTIME& systemTime);

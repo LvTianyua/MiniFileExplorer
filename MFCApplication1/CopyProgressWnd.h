@@ -20,7 +20,7 @@ public:
 
     virtual BOOL OnInitDialog();
     void UpdateProgress(const double& dProgress);
-    void SetCopyInfo(const UINT64& ui64FileNum, const UINT64& ui64FileSize, const CString& strFilePath);
+    void SetCopyInfo(const UINT64& ui64FileNum, const UINT64& ui64FileSize, const CString& strSrcFilePath, const CString& strDestFilePath);
 
     afx_msg LRESULT OnUpdateProgress(WPARAM wParam = 0, LPARAM lParam = 0);
 
@@ -36,5 +36,6 @@ private:
 
     UINT64 m_ui64FileNum = 0;
     UINT64 m_ui64FileSize = 0;
-    CString m_strFilePath;
+    CString m_strSrcFilePath;
+    CString m_strDestFilePath;
 };

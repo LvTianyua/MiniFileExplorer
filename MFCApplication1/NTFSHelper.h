@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-#include <mutex>
+#include "SingleInstace.h"
 
 #define MSG_UPDATE_PROGRESS  WM_USER + 0x01
 
@@ -83,83 +83,24 @@ typedef struct _DataInfo
     UINT64 ui64UsedSclusters = 0;            // 占用多少簇
 }DataInfo, *pDataInfo;
 
-class CNTFSHelper
+class CNTFSHelper : public CSingleInstace<CNTFSHelper>
 {
 private:
-    CNTFSHelper();
     ~CNTFSHelper();
-    CNTFSHelper(const CNTFSHelper&);
-    void operator=(const CNTFSHelper&);
-
 public:
-    static CNTFSHelper* GetInstance();
-    static void DeleteInstance();
-
-    // 获取逻辑驱动器数量
-    int GetLogicDriversNum();
+    // 设置当前盘符
+    BOOL SetCurDriverInfo(const CString& strDriverName);
+    // 获取当前盘符
+    CString GetCurDriverName();
 
     // 获取所有逻辑驱动器名称集合
     std::vector<CString> GetAllLogicDriversNames();
-
-    // 获取dbr信息
-    BOOL GetDBRInfo(NTFSDBR& dbrInfo);
-    // 获取dbr信息
-    BOOL GetDBRInfo(const HANDLE& hDriver, NTFSDBR& dbrInfo);
-
-    // 根据dbr信息判断是不是ntfs盘
-    BOOL IsNTFSDriver(const NTFSDBR& dbrInfo);
-
-    // 根据dbr获取MFT表的起始偏移量
-    UINT64 GetMFTStartPositionByDBR(const NTFSDBR& dbrInfo);
-
-    // 获取除元文件外第一个文件记录的起始偏移量，返回0说明中间读取出错了，本次查询失败
-    UINT64 GetMFTStartPositionExceptUnitFile();
-
-    // 根据首地址(512字节对齐，必须是512倍数)，读取数据长度必须为512倍数，获取指定段数据
-    BOOL GetAnySectionBuffer(const UINT64& ui64SPos, const UINT64& ui64Len, PBYTE pBuffer);
-
-    // 根据首地址(512字节对齐，必须是512倍数)，读取数据长度必须为512倍数，获取指定段数据
-    BOOL GetAnySectionBuffer(const HANDLE& hDriver, const UINT64& ui64SPos, const UINT64& ui64Len, PBYTE pBuffer);
 
     // 根据文件参考号获取文件记录（DeviceIoControl API方式）
     BOOL GetFileRecordByFileRefNum(const UINT64& ui64FileRefNum, PBYTE pBuffer);
 
     // 根据文件参考号获取文件记录（遍历磁盘全部扇区解析属性方式寻找，文件参考号就是MFT中第N项）
     BOOL GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer);
-
-    // 解析文件记录获取文件属性信息 FileAttrInfo
-    BOOL GetFileAttrInfoByFileRecord(const PBYTE pRecordBuffer, FileAttrInfo& fileAttrInfo);
-
-    // 根据文件记录获取文件名
-    BOOL GetFileNameByFileRecord(const PBYTE pRecordBuffer, CString& strFileName);
-
-    // 遍历属性列表寻找指定属性
-    BOOL FindAnyAttrSPosByFileRecord(const PBYTE pRecordBuffer, const UINT& uiAttrType, UINT& uiAttrSPos, UINT& uiAttrLength);
-
-    // 获取A0属性指向的datarun列表
-    BOOL GetA0HAttrDataRunLists(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunLists);
-
-    // 获取90属性指向的datarun列表
-    BOOL Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecFileAttrLists);
-
-    // 获取90属性中是否有子项是文件夹
-    BOOL Get90HAttrChildHaveDir(const PBYTE pRecordBuffer, BOOL& bHaveChildDir);
-
-    // 根据datarun列表获取索引项相关的信息
-    BOOL GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos);
-
-    // 根据datarun列表判断子索引是否包含文件夹
-    BOOL GetChildHaveDirByRunList(const std::vector<DataInfo>& vecDataRunLists, BOOL& bHaveChildDir);
-
-    // 针对文件解析80属性，根据文件记录获取文件真实数据
-    // 返回值：0，失败 1，成功 FileDataBuffer就是文件数据 2，文件数据大于4m，存在是超大文件的可能性，只给出datarun信息，自己循环边读边写
-    UINT GetFileDataByFileRecord(const PBYTE pFileRecordBuffer, PBYTE pFileDataBuffer, std::vector<DataInfo>& vecDataRunList);
-
-    // 针对超过4m的文件，进行分块读写
-    BOOL BigFileBlockReadAndWrite(const std::vector<DataInfo>& vecDataRunList, const CString& strWriteFilePath, const UINT64& ui64FileRealSize);
-
-    // 将缓冲区数据写入文件
-    BOOL WriteFileFromBuffer(const PBYTE pBuffer, const UINT64& ui64WriteLength, const CString& strFilePath, BOOL bTruncate = FALSE);
 
     // Ntfs拷贝，通过源文件参考号以及源文件真实大小，拷贝到目标路径（绝对路径）
     BOOL MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64SrcFileSize, const CString& strDestPath);
@@ -186,11 +127,8 @@ protected:
     // 根据20属性读取其中的A0对应的子项集合
     BOOL _GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
 
-    // 根据20属性读取其中的A0对应的子项集合
+    // 根据20属性读取其中的90对应的子项集合
     BOOL _Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
-
-    // 解析30H属性，对当前FileAttrInfo赋值
-    BOOL _GetFileInfoBy30HAttr(const PBYTE pRecordBuffer, const UINT& ui30HSPos, FileAttrInfo& fileAttrInfo);
 
     // 根据30H属性获取文件名
     BOOL _GetFileNameBy30HAttr(const PBYTE pRecordBuffer, const UINT& ui30HSPos, CString& strFileName);
@@ -205,7 +143,7 @@ protected:
     BOOL _AutoGetFullPath(const PBYTE pRecordBuffer, CString& strPath);
 
     // 文件记录中提取的时间转换为SYSTEMTIME
-    BOOL TimeFromRecordToSystemTime(const UINT64& ui64Time, SYSTEMTIME& systemTime);
+    BOOL _TimeFromRecordToSystemTime(const UINT64& ui64Time, SYSTEMTIME& systemTime);
 
     // 获取A0属性datarun起始偏移
     BOOL _GetA0HAttrDataRunSPos(const PBYTE pRecordBuffer, unsigned short& usDataRunSPos);
@@ -219,9 +157,6 @@ protected:
     // 从datarun数据流中读取一组FileAttrInfo信息
     BOOL _GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer, const UINT& uiIndexSPos, FileAttrInfo& fileAttrInfo);
 
-    // 从datarun数据流中判断当前一个文件是不是文件夹
-    BOOL _GetOneIsDirByDataRunBuffer(const PBYTE pDataRunBuffer, const UINT& uiIndexSPos, BOOL& bIsDir);
-
     // 读取80对应datarun的filedata（最大读取4m，超过需要循环读取）
     BOOL _GetFileDataByDataRun(const std::vector<DataInfo>& vecDataRunList, PBYTE pFileData);
 
@@ -231,22 +166,52 @@ protected:
     // 对获取到的子项进行排序，按照先文件夹再文件的顺序
     void _SortChildInfos(std::vector<FileAttrInfo>& vecChildInfos, UINT& uiDirNum);
 
-public:
-    // 设置当前盘符
-    BOOL SetCurDriverInfo(const CString& strDriverName);
-    // 获取当前盘符
-    CString GetCurDriverName();
-    // 获取当前盘符句柄
-    HANDLE GetCurDriverHandle();
-    // 重置当前盘符
-    void ResetCurDriverInfo();
-
-protected:
     // 判断一个字符是不是字母
-    BOOL IsLetter(const TCHAR& str);
+    BOOL _IsLetter(const TCHAR& str);
+
+    // 重置当前盘符
+    void _ResetCurDriverInfo();
+
+    // 获取dbr信息
+    BOOL _GetDBRInfo(NTFSDBR& dbrInfo);
+    BOOL _GetDBRInfo(const HANDLE& hDriver, NTFSDBR& dbrInfo);
+
+    // 根据dbr信息判断是不是ntfs盘
+    BOOL _IsNTFSDriver(const NTFSDBR& dbrInfo);
+
+    // 根据dbr获取MFT表的起始偏移量
+    UINT64 _GetMFTStartPositionByDBR(const NTFSDBR& dbrInfo);
+
+    // 根据首地址(512字节对齐，必须是512倍数)，读取数据长度必须为512倍数，获取指定段数据
+    BOOL _GetAnySectionBuffer(const UINT64& ui64SPos, const UINT64& ui64Len, PBYTE pBuffer);
+    BOOL _GetAnySectionBuffer(const HANDLE& hDriver, const UINT64& ui64SPos, const UINT64& ui64Len, PBYTE pBuffer);
+
+    // 根据文件记录获取文件名
+    BOOL _GetFileNameByFileRecord(const PBYTE pRecordBuffer, CString& strFileName);
+
+    // 遍历属性列表寻找指定属性
+    BOOL _FindAnyAttrSPosByFileRecord(const PBYTE pRecordBuffer, const UINT& uiAttrType, UINT& uiAttrSPos, UINT& uiAttrLength);
+
+    // 获取A0属性指向的datarun列表
+    BOOL _GetA0HAttrDataRunLists(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunLists);
+
+    // 获取90属性指向的datarun列表
+    BOOL _Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecFileAttrLists);
+
+    // 根据datarun列表获取索引项相关的信息
+    BOOL _GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos);
+
+    // 针对文件解析80属性，根据文件记录获取文件真实数据
+    // 返回值：0，失败 1，成功 FileDataBuffer就是文件数据 2，文件数据大于4m，存在是超大文件的可能性，只给出datarun信息，自己循环边读边写
+    UINT _GetFileDataByFileRecord(const PBYTE pFileRecordBuffer, PBYTE pFileDataBuffer, std::vector<DataInfo>& vecDataRunList);
+
+    // 针对超过4m的文件，进行分块读写
+    BOOL _BigFileBlockReadAndWrite(const std::vector<DataInfo>& vecDataRunList, const CString& strWriteFilePath, const UINT64& ui64FileRealSize);
+
+    // 将缓冲区数据写入文件
+    BOOL _WriteFileFromBuffer(const PBYTE pBuffer, const UINT64& ui64WriteLength, const CString& strFilePath, BOOL bTruncate = FALSE);
 
 private:
-    static CNTFSHelper* s_pHelper;
     CString                                         m_strCurDriverName;         // 当前打开的盘符，返回到磁盘列表时应置空
     HANDLE                                          m_hanCurDriver = NULL;             // 当前盘符句柄
     HWND                                            m_hProgressWnd = NULL;

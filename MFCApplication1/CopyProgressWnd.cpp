@@ -29,10 +29,14 @@ BOOL CCopyProgressWnd::OnInitDialog()
     if (CNTFSHelper::GetInstance())
     {
         CNTFSHelper::GetInstance()->SetProgressWndHandle(GetSafeHwnd());
-        if (CNTFSHelper::GetInstance()->MyCopyFile(m_ui64FileNum, m_ui64FileSize, m_strFilePath))
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath.Mid(0, 1));
+        if (CNTFSHelper::GetInstance()->MyCopyFile(m_ui64FileNum, m_ui64FileSize, m_strDestFilePath))
         {
+            CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(m_strDestFilePath.Mid(0, 1)));
             EndDialog(IDOK);
+            return TRUE;
         }
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(m_strDestFilePath.Mid(0, 1)));
     }
     EndDialog(IDCANCEL);
 
@@ -56,11 +60,12 @@ void CCopyProgressWnd::UpdateProgress(const double& dProgress)
     m_staProgress.SetWindowText(strText);
 }
 
-void CCopyProgressWnd::SetCopyInfo(const UINT64& ui64FileNum, const UINT64& ui64FileSize, const CString& strFilePath)
+void CCopyProgressWnd::SetCopyInfo(const UINT64& ui64FileNum, const UINT64& ui64FileSize, const CString& strSrcFilePath, const CString& strDestFilePath)
 {
     m_ui64FileNum = ui64FileNum;
     m_ui64FileSize = ui64FileSize;
-    m_strFilePath = strFilePath;
+    m_strSrcFilePath = strSrcFilePath;
+    m_strDestFilePath = strDestFilePath;
 }
 
 LRESULT CCopyProgressWnd::OnUpdateProgress(WPARAM wParam /*= 0*/, LPARAM lParam /*= 0*/)
