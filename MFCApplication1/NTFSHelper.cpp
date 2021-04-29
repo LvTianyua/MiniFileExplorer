@@ -604,7 +604,10 @@ BOOL CNTFSHelper::_CalcNonFirstDataRunDevForLast(const UINT64& ui64LastBeginClus
     }
 
     // 先判断符号位
-    if ((ui64BeginCluster & (0x80 << ((uiNum - 1) * 8))) == (0x80 << ((uiNum - 1) * 8)))
+    UINT64 ui64Sym = 0x80;
+    UINT64 ui64Symbol = (UINT64)(ui64Sym << ((uiNum - 1) * 8));
+    UINT64 ui64Symbol1 = ui64BeginCluster & ui64Symbol;
+    if (ui64Symbol1 == ui64Symbol)
     {
         // 将64位前面的空位全部填充1，即为真实的偏移量
         ui64BeginCluster |= (0xFFFFFFFFFFFFFFFF << (uiNum * 8));
@@ -845,6 +848,67 @@ BOOL CNTFSHelper::_WriteFileFromBuffer(const PBYTE pBuffer, const UINT64& ui64Wr
     return FALSE;
 }
 
+BOOL CNTFSHelper::_GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunInfos)
+{
+    UINT ui20AttrSPos = 0;
+    UINT uiAttrLength = 0;
+    if (_FindAnyAttrSPosByFileRecord(pRecordBuffer, 0x20, ui20AttrSPos, uiAttrLength))
+    {
+        UINT uiLength = ui20AttrSPos + uiAttrLength;
+        ui20AttrSPos += 0x18;
+        UINT uiAttrType = 0;
+        uiAttrLength = 0;
+        while (ui20AttrSPos < uiLength)
+        {
+            memcpy(&uiAttrType, &pRecordBuffer[ui20AttrSPos], 4);
+            if (uiAttrType != 0x80)
+            {
+                memcpy(&uiAttrLength, &pRecordBuffer[ui20AttrSPos + 0x04], 2);
+                ui20AttrSPos += uiAttrLength;
+                continue;
+            }
+
+            UINT64 ui64FileNum = 0;
+            memcpy(&ui64FileNum, &pRecordBuffer[ui20AttrSPos + 0x10], 6);
+
+            UINT64 ui64CurFileNum = 0;
+            UINT ui64CurFileNumXP = 0;
+            memcpy(&ui64CurFileNum, &pRecordBuffer[0x20], 6);
+            memcpy(&ui64CurFileNumXP, &pRecordBuffer[0x2C], 4);
+
+            if (ui64FileNum == ui64CurFileNum || ui64FileNum == ui64CurFileNumXP)
+            {
+                memcpy(&uiAttrLength, &pRecordBuffer[ui20AttrSPos + 0x04], 2);
+                ui20AttrSPos += uiAttrLength;
+                continue;
+            }
+
+            BYTE newRecordBuffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+            if (GetFileRecordByFileRefNum(ui64FileNum, newRecordBuffer))
+            {
+                UINT ui80AttrSPos = 0;
+                UINT ui80AttrLength = 0;
+                if (_FindAnyAttrSPosByFileRecord(newRecordBuffer, 0x80, ui80AttrSPos, ui80AttrLength))
+                {
+                    UINT uiDataRunSPos = ui80AttrSPos + 0x40;
+                    UINT uiDataRunLength = ui80AttrLength - 0x40;
+                    std::vector<DataInfo> tmpDataRunList;
+                    if (_GetDataRunList(newRecordBuffer, uiDataRunSPos, uiDataRunLength, tmpDataRunList))
+                    {
+                        vecDataRunInfos.insert(vecDataRunInfos.end(), tmpDataRunList.begin(), tmpDataRunList.end());
+                    }
+                }
+            }
+
+            // 有可能有多个80，继续循环
+            memcpy(&uiAttrLength, &pRecordBuffer[ui20AttrSPos + 0x04], 2);
+            ui20AttrSPos += uiAttrLength;
+        }
+    }
+
+    return !vecDataRunInfos.empty();
+}
+
 BOOL CNTFSHelper::MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64SrcFileSize, const CString& strDestPath)
 {
     // 1.读取源文件文件记录
@@ -985,7 +1049,7 @@ BOOL CNTFSHelper::GetFilePathByFileNum(const UINT64& ui64FileNum, CString& strFi
     return FALSE;
 }
 
-void CNTFSHelper::SetProgressWndHandle(HWND hProgressWnd)
+void CNTFSHelper::SetProgressWndHandle(const HWND& hProgressWnd)
 {
     m_hProgressWnd = hProgressWnd;
 }
@@ -1120,65 +1184,11 @@ UINT CNTFSHelper::_GetFileDataByFileRecord(const PBYTE pFileRecordBuffer, PBYTE 
             // 巨大的问题，所以可能需要分块读
             // 这里还要考虑20属性的问题，先判断下有没有20属性，如果有，先把里面的80对应的文件记录里面的80属性中的datarun拿出来存一下
             // 再与本文件记录的80属性下面的datarun合并（如果存在，合并方式为追加）
-            UINT ui20AttrSPos = 0;
-            UINT uiAttrLength = 0;
             std::vector<DataInfo> vecDataRunListIn20Attr;
-            if (_FindAnyAttrSPosByFileRecord(pFileRecordBuffer, 0x20, ui20AttrSPos, uiAttrLength))
-            {
-                UINT uiLength = ui20AttrSPos + uiAttrLength;
-                ui20AttrSPos += 0x18;
-                UINT uiAttrType = 0;
-                uiAttrLength = 0;
-                while (ui20AttrSPos < uiLength)
-                {
-                    memcpy(&uiAttrType, &pFileRecordBuffer[ui20AttrSPos], 4);
-                    if (uiAttrType != 0x80)
-                    {
-                        memcpy(&uiAttrLength, &pFileRecordBuffer[ui20AttrSPos + 0x04], 2);
-                        ui20AttrSPos += uiAttrLength;
-                        continue;
-                    }
-
-                    UINT64 ui64FileNum = 0;
-                    memcpy(&ui64FileNum, &pFileRecordBuffer[ui20AttrSPos + 0x10], 6);
-
-                    UINT64 ui64CurFileNum = 0;
-                    UINT ui64CurFileNumXP = 0;
-                    memcpy(&ui64CurFileNum, &pFileRecordBuffer[0x20], 6);
-                    memcpy(&ui64CurFileNumXP, &pFileRecordBuffer[0x2C], 4);
-
-                    if (ui64FileNum == ui64CurFileNum || ui64FileNum == ui64CurFileNumXP)
-                    {
-                        memcpy(&uiAttrLength, &pFileRecordBuffer[ui20AttrSPos + 0x04], 2);
-                        ui20AttrSPos += uiAttrLength;
-                        continue;
-                    }
-
-                    BYTE newRecordBuffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                    if (GetFileRecordByFileRefNum(ui64FileNum, newRecordBuffer))
-                    {
-                        UINT ui80AttrSPos = 0;
-                        UINT ui80AttrLength = 0;
-                        if (_FindAnyAttrSPosByFileRecord(newRecordBuffer, 0x80, ui80AttrSPos, ui80AttrLength))
-                        {
-                            UINT uiDataRunSPos = ui80AttrSPos + 0x40;
-                            UINT uiDataRunLength = ui80AttrLength - 0x40;
-                            std::vector<DataInfo> tmpDataRunList;
-                            if (_GetDataRunList(pFileRecordBuffer, uiDataRunSPos, uiDataRunLength, tmpDataRunList))
-                            {
-                                vecDataRunListIn20Attr.insert(vecDataRunListIn20Attr.end(), tmpDataRunList.begin(), tmpDataRunList.end());
-                            }
-                        }
-                    }
-
-                    // 有可能有多个80，继续循环
-                    memcpy(&uiAttrLength, &pFileRecordBuffer[ui20AttrSPos + 0x04], 2);
-                    ui20AttrSPos += uiAttrLength;
-                }
-            }
+            _GetDataRunBy80AttrFrom20Attr(pFileRecordBuffer, vecDataRunListIn20Attr);
 
             UINT uiDataRunSPos = ui80AttrSPos + 0x40;
-            uiAttrLength = 0;
+            UINT uiAttrLength = 0;
             memcpy(&uiAttrLength, &pFileRecordBuffer[ui80AttrSPos + 0x04], 4);
             UINT uiDataRunLength = uiAttrLength - 0x40;
             if (_GetDataRunList(pFileRecordBuffer, uiDataRunSPos, uiDataRunLength, vecDataRunList))
@@ -1203,6 +1213,26 @@ UINT CNTFSHelper::_GetFileDataByFileRecord(const PBYTE pFileRecordBuffer, PBYTE 
             }
         }
     }
+    else
+    {
+        // 没有80属性，说明文件的datarun全在20里面
+        if (_GetDataRunBy80AttrFrom20Attr(pFileRecordBuffer, vecDataRunList))
+        {
+            UINT64 ui64AllFileDataSize = 0;
+            for (auto dataInfo : vecDataRunList)
+            {
+                ui64AllFileDataSize += dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE;
+            }
+            if (ui64AllFileDataSize > ONE_FILE_BLOCK_SIZE)
+            {
+                return 2;
+            }
+            if (pFileDataBuffer)
+            {
+                return _GetFileDataByDataRun(vecDataRunList, pFileDataBuffer);
+            }
+        }
+    }
 
     return 0;
 }
@@ -1221,22 +1251,20 @@ BOOL CNTFSHelper::_BigFileBlockReadAndWrite(const std::vector<DataInfo>& vecData
     
     double dPercent = 0;
     BOOL bTranCate = FALSE;
+    UINT uiTime = 0;
     for each (auto datainfo in vecDataRunList)
     {
+        ++uiTime;
         UINT64 ui64FinishSize = 0;
         UINT64 ui64RemainSize = datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE;
         while (ui64RemainSize > 0)
         {
-            if (ui64FinishSize >= 4294967296)
-            {
-                int a = 0;
-            }
             UINT64 ui64ReadSize = min(ui64RemainSize, ONE_FILE_BLOCK_SIZE);
             PBYTE pBuffer = (PBYTE)VirtualAlloc(NULL, ui64ReadSize + 1, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             if (_GetAnySectionBuffer(datainfo.ui64BeginScluster * ONE_CLUSTER_SIZE + ui64FinishSize, ui64ReadSize, pBuffer))
             {
                 // 最后一块的时候，写的时候要剪掉之前保存的结尾的填充位
-                if (!_WriteFileFromBuffer(pBuffer, ui64RemainSize <= ui64ReadSize ? ui64ReadSize - uiFillSize : ui64ReadSize, strWriteFilePath, bTranCate))
+                if (!_WriteFileFromBuffer(pBuffer, (uiTime == vecDataRunList.size() && ui64RemainSize <= ui64ReadSize) ? ui64ReadSize - uiFillSize : ui64ReadSize, strWriteFilePath, bTranCate))
                 {
                     VirtualFree(pBuffer, 0, MEM_RELEASE);
                     if (m_hFile)

@@ -18,6 +18,7 @@
 // CMFCApplication1Dlg 对话框
 
 #define ONE_TIME_INSERT_LIST_SIZE 1000
+#define ONE_TIME_INSERT_TREE_SIZE 10000
 #define MSG_ASYNC_ADD_TREE_ITEM     WM_USER + 20001 
 
 CMFCApplication1Dlg::CMFCApplication1Dlg(CWnd* pParent /*=NULL*/)
@@ -32,6 +33,7 @@ void CMFCApplication1Dlg::DoDataExchange(CDataExchange* pDX)
     DDX_Control(pDX, IDC_TREE1, m_treeMain);
     DDX_Control(pDX, IDC_LIST2, m_listFiles);
     DDX_Control(pDX, IDC_STATIC1, m_staPath);
+    DDX_Control(pDX, IDC_STATIC2, m_staListCount);
 }
 
 BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
@@ -254,16 +256,16 @@ void CMFCApplication1Dlg::AddSubTreeItem(const HTREEITEM& hParentItem)
                     BeginWaitCursor();
 
                     // 一次最多只加10000个 节省时间，剩下的交给后台检查线程去做
-                    UINT uiInsertNum = min(m_uiCurChildDirNum, 10000);
+                    UINT uiInsertNum = min(m_uiCurChildDirNum, ONE_TIME_INSERT_TREE_SIZE);
                     for (UINT ui = 0; ui < uiInsertNum; ++ui)
                     {
                         // 排序规则就是前面都是文件夹，所以只取前m_uiCurChildDirNum个就可以了
                         AddOneTreeItem(hParentItem, PathFindFileName(m_vecCurChildAttrInfos[ui].strFilePath), m_vecCurChildAttrInfos[ui].ui64FileUniNum, itemData.strLocalDriverName);
                     }
 
-                    if (m_uiCurChildDirNum > 10000)
+                    if (m_uiCurChildDirNum > ONE_TIME_INSERT_TREE_SIZE)
                     {
-                        for (UINT ui = 10000; ui < m_uiCurChildDirNum; ++ui)
+                        for (UINT ui = ONE_TIME_INSERT_TREE_SIZE; ui < m_uiCurChildDirNum; ++ui)
                         {
                             // 排序规则就是前面都是文件夹，所以只取前m_uiCurChildDirNum个就可以了
                             AddOneTreeItem(hParentItem, PathFindFileName(m_vecCurChildAttrInfos[ui].strFilePath), m_vecCurChildAttrInfos[ui].ui64FileUniNum, itemData.strLocalDriverName);
@@ -468,6 +470,8 @@ void CMFCApplication1Dlg::ShowChildList(const int& nItemIndex)
     }
     m_ui64CurFileNum = itemData.ui64FileNum;
     CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(itemData.ui64FileNum, m_ui64ParentFileNum);
+
+    // 设置路径
     CString strFilePath = itemData.strFilePath;
     if (itemData.ui64FileNum == 5)
     {
@@ -478,9 +482,14 @@ void CMFCApplication1Dlg::ShowChildList(const int& nItemIndex)
         strFilePath += L"\\";
     }
     m_staPath.SetWindowText(strFilePath);
+
+    // 设置目录下项目总数
+    CString strFileCount;
+    strFileCount.Format(L"共%u个项目", (UINT)m_vecCurChildAttrInfos.size());
+    m_staListCount.SetWindowText(strFileCount);
 }
 
-void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName, BOOL bForce)
+void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName)
 {
     m_listFiles.DeleteAllItems();
     m_mapListItemDatas.clear();
@@ -507,7 +516,7 @@ void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString
         if (CNTFSHelper::GetInstance()->SetCurDriverInfo(strDriverName))
         {
             BOOL bSuc = ui64FileNum == m_ui64CurFileNum;
-            if (bForce || !bSuc || bDriverChange)
+            if (!bSuc || bDriverChange)
             {
                 // 重刷下界面，因为下面操作有卡主界面风险，先刷一下，再设置鼠标等待状态，看着正常点
                 BeginWaitCursor();
@@ -541,6 +550,7 @@ void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString
     m_ui64CurFileNum = ui64FileNum;
     CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(ui64FileNum, m_ui64ParentFileNum);
 
+    // 设置路径
     CString strFilePath;
     if (m_ui64ParentFileNum == 0)
     {
@@ -557,6 +567,11 @@ void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString
         }
     }
     m_staPath.SetWindowText(strFilePath);
+
+    // 设置目录下项目总数
+    CString strFileCount;
+    strFileCount.Format(L"共%u个项目", (UINT)m_vecCurChildAttrInfos.size());
+    m_staListCount.SetWindowText(strFileCount);
 }
 
 CString CMFCApplication1Dlg::TimeToString(const SYSTEMTIME& systemTime)
@@ -607,7 +622,7 @@ void CMFCApplication1Dlg::TreeSyncToList()
         {
             ItemData itemData;
             itemData = m_mapTreeItemDatas[hItem];
-            if (itemData.ui64FileNum != m_ui64CurFileNum)
+            if (itemData.ui64FileNum != m_ui64CurFileNum || itemData.strLocalDriverName != CNTFSHelper::GetInstance()->GetCurDriverName())
             {
                 ShowChildList(itemData.ui64FileNum, itemData.strLocalDriverName);
             }
