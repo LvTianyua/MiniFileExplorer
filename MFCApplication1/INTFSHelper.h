@@ -53,9 +53,19 @@ typedef struct _NTFSDBR {
 
 typedef struct _DataInfo
 {
+    bool operator==(const _DataInfo &rhs) const
+    {
+        return ui64BeginScluster == rhs.ui64BeginScluster && ui64UsedSclusters == rhs.ui64UsedSclusters;
+    }
+
+    bool operator<(const _DataInfo &rhs) const
+    {
+        return ui64BeginScluster < rhs.ui64BeginScluster;
+    }
+
     BOOL IsValid()
     {
-        return ui64BeginScluster != 0 && ui64UsedSclusters != 0;
+        return ui64UsedSclusters != 0;
     }
 
     UINT64 ui64BeginScluster = 0;            // 起始簇号
@@ -111,26 +121,6 @@ public:
     * @return 当前计算机下逻辑磁盘名称集合
     */
     virtual std::vector<CString> GetAllLogicDriversNames() = 0;
-
-    /**
-    *
-    *  根据文件参考号获取文件记录（DeviceIoControl API方式）
-    * @param ui64FileRefNum（IN） 文件参考号
-    * @param pBuffer（OUT） 文件记录buffer
-    *
-    * @return 成功 TRUE 失败 FALSE
-    */
-    virtual BOOL GetFileRecordByFileRefNum(const UINT64& ui64FileRefNum, PBYTE pBuffer) = 0;
-
-    /**
-    *
-    *  根据文件参考号获取文件记录（遍历磁盘全部扇区解析属性方式寻找，文件参考号就是MFT中第N项）
-    * @param ui64FileRefNum（IN） 文件参考号
-    * @param pBuffer（OUT） 文件记录buffer
-    *
-    * @return 成功 TRUE 失败 FALSE
-    */
-    virtual BOOL GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer) = 0;
 
     /**
     *

@@ -16,12 +16,6 @@ public:
     // 获取所有逻辑驱动器名称集合
     virtual std::vector<CString> GetAllLogicDriversNames() override;
 
-    // 根据文件参考号获取文件记录（DeviceIoControl API方式）
-    virtual BOOL GetFileRecordByFileRefNum(const UINT64& ui64FileRefNum, PBYTE pBuffer) override;
-
-    // 根据文件参考号获取文件记录（遍历磁盘全部扇区解析属性方式寻找，文件参考号就是MFT中第N项）
-    virtual BOOL GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer) override;
-
     // Ntfs拷贝，通过源文件参考号以及源文件真实大小，拷贝到目标路径（绝对路径）
     virtual BOOL MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64SrcFileSize, const CString& strDestPath) override;
 
@@ -38,6 +32,12 @@ public:
     virtual void SetProgressWndHandle(const HWND& hProgressWnd) override;
 
 protected:
+    // 根据文件参考号获取文件记录（DeviceIoControl API方式）
+    BOOL _GetFileRecordByFileRefNum(const UINT64& ui64FileRefNum, PBYTE pBuffer);
+
+    // 根据文件参考号获取文件记录（遍历磁盘全部扇区解析属性方式寻找，文件参考号就是MFT中第N项）
+    BOOL _GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer);
+
     // 根据文件记录获取30H首地址，返回False可能是存在20属性
     BOOL _Get30HAttrSPosByFileRecord(const PBYTE pRecordBuffer, UINT& ui30HSpos);
 
