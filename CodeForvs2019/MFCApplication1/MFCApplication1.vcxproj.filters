@@ -42,6 +42,9 @@
     <ClInclude Include="SingleInstace.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="INTFSHelper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MFCApplication1.cpp">
@@ -57,9 +60,6 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CopyProgressWnd.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="SingleInstace.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

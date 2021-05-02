@@ -373,12 +373,12 @@ void CMFCApplication1Dlg::AddOneListItem(const FileAttrInfo& fileAttrInfo, const
     int iIconIndex = -1;
     if (!fileAttrInfo.bIsDir)
     {
-        if (m_mapExtIndex.find(PathFindExtension(fileAttrInfo.strFilePath)) == m_mapExtIndex.end())
+        if (m_mapExtIndex.find(fileAttrInfo.strFilePath) == m_mapExtIndex.end())
         {
-            m_listImageList.Add(GetFileBaseInfo(PathFindExtension(fileAttrInfo.strFilePath)).hIcon);
-            m_mapExtIndex.insert(std::make_pair(PathFindExtension(fileAttrInfo.strFilePath), m_listImageList.GetImageCount() - 1));
+            m_listImageList.Add(GetFileBaseInfo(fileAttrInfo.strFilePath).hIcon);
+            m_mapExtIndex.insert(std::make_pair(fileAttrInfo.strFilePath, m_listImageList.GetImageCount() - 1));
         }
-        iIconIndex = m_mapExtIndex[PathFindExtension(fileAttrInfo.strFilePath)];
+        iIconIndex = m_mapExtIndex[fileAttrInfo.strFilePath];
     }
     else
     {
@@ -408,7 +408,7 @@ void CMFCApplication1Dlg::AddOneListItem(const FileAttrInfo& fileAttrInfo, const
     m_listFiles.SetItemText(iItemIndex, 1, TimeToString(fileAttrInfo.stFileModifyTime));
 
     // 第三列类型
-    m_listFiles.SetItemText(iItemIndex, 2, fileAttrInfo.bIsDir ? L"文件夹" : GetFileBaseInfo(PathFindExtension(fileAttrInfo.strFilePath)).szTypeName);
+    m_listFiles.SetItemText(iItemIndex, 2, fileAttrInfo.bIsDir ? L"文件夹" : GetFileBaseInfo(fileAttrInfo.strFilePath).szTypeName);
 
     // 第四列大小
     m_listFiles.SetItemText(iItemIndex, 3, fileAttrInfo.bIsDir ? L"" : SizeToString(fileAttrInfo.ui64FileSize));

@@ -32,7 +32,7 @@ public:
 	enum { IDD = IDD_MFCAPPLICATION1_DIALOG };
 #endif
 
-	protected:
+protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
 
 public:
@@ -55,6 +55,7 @@ public:
     afx_msg void OnUpdateCopy(CCmdUI *pCmdUI);
     afx_msg void OnUpdateCut(CCmdUI *pCmdUI);
     afx_msg void OnLvnEndScrollList2(NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg void OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResult);
 
 // 实现
 protected:
@@ -85,7 +86,7 @@ protected:
     void AddOneListItem(const FileAttrInfo& fileAttrInfo, const CString& strDriverName);
     // 根据当前目录文件参考号展示全部子项list
     void ShowChildList(const int& nItemIndex);
-    void ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName, BOOL bForce = FALSE);
+    void ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName);
 
     // SYSTIME转CString
     CString TimeToString(const SYSTEMTIME& systemTime);
@@ -101,8 +102,6 @@ protected:
 
     // 设置粘贴按钮是否可用
     void SetTieMenuItemEnable();
-public:
-    CTreeCtrl& GetTreeMainCtrl() { return m_treeMain; }
 
 private:
     // 左侧导航树
@@ -111,25 +110,29 @@ private:
     CListCtrl m_listFiles;
     // 当前路径显示
     CStatic m_staPath;
-    // TreeItem RootItem
-    HTREEITEM m_hTreeRootItem;
+    // list总item数
+    CStatic m_staListCount;
     // TreeItem ImageList
     CImageList m_treeImageList;
-    // TreeItemData
-    std::map<HTREEITEM, ItemData> m_mapTreeItemDatas;
     // ListItem ImageList
     CImageList m_listImageList;
-    // ListItemData
-    std::map<int, ItemData> m_mapListItemDatas;
+
+    // TreeItem RootItem
+    HTREEITEM m_hTreeRootItem;
     // 记录一下当前所在目录的父参考号
     UINT64  m_ui64ParentFileNum = 0;
     // 记录一下当前所在目录的参考号
     UINT64  m_ui64CurFileNum = 0;
+    // TreeItemData
+    std::map<HTREEITEM, ItemData> m_mapTreeItemDatas;
+    // ListItemData
+    std::map<int, ItemData> m_mapListItemDatas;
     // 后缀名和imagelist的映射
     std::map<CString, int> m_mapExtIndex;
     // 当前目录下子项集合真实数据
     std::vector<FileAttrInfo> m_vecCurChildAttrInfos;
 
+    // 文件复制剪切相关标记
     BOOL m_bCut = FALSE;
     BOOL m_bCopying = FALSE;
     UINT64 m_ui64SrcFileNum = 0;
@@ -137,9 +140,8 @@ private:
     UINT m_uiCurChildDirNum = 0;
     CString m_strSrcFilePath;
 
+    // 右键菜单
     CMenu m_menu;
     CMenu* m_menuRButton1 = nullptr;
     CMenu* m_menuRButton2 = nullptr;
-public:
-    afx_msg void OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResult);
 };

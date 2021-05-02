@@ -1041,6 +1041,12 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
                     return TRUE;
                 }
             }
+            else if (bHave20HAttr)
+            {
+				vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
+				_SortChildInfos(vecChildAttrInfos, uiDirNum);
+                return TRUE;
+            }
         }
     }
 
