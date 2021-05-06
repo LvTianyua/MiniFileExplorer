@@ -563,7 +563,7 @@ BOOL CNTFSHelper::_GetDataRunList(const PBYTE pRecordBuffer, const UINT& uiDatar
         {
             // 结束返回
             sort(vecDatarunList.begin(), vecDatarunList.end(), DataInfoCompare);
-            for (auto info : mapXiShuData)
+            for (const auto& info : mapXiShuData)
             {
                 if (info.second.ui64UsedSclusters == 0)
                 {
@@ -696,7 +696,7 @@ BOOL CNTFSHelper::_GetFileDataByDataRun(const std::vector<DataInfo>& vecDataRunL
 {
     // 先检查下，读的范围不能超过4m
     UINT64 ui64FileDataSize = 0;
-    for (auto datainfo : vecDataRunList)
+    for (const auto& datainfo : vecDataRunList)
     {
         ui64FileDataSize += datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE;
     }
@@ -707,7 +707,7 @@ BOOL CNTFSHelper::_GetFileDataByDataRun(const std::vector<DataInfo>& vecDataRunL
 
     // 正式开始读
     UINT64 ui64FinishSize = 0;
-    for (auto datainfo : vecDataRunList)
+    for (const auto& datainfo : vecDataRunList)
     {
         PBYTE pBuffer = (PBYTE)VirtualAlloc(NULL, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (datainfo.ui64BeginScluster == 0 && datainfo.ui64UsedSclusters != 0)
@@ -796,7 +796,7 @@ void CNTFSHelper::_SortChildInfos(std::vector<FileAttrInfo>& vecChildInfos, UINT
     std::vector<FileAttrInfo> ::iterator newit = std::unique(vecChildInfos.begin(), vecChildInfos.end());
     vecChildInfos.erase(newit, vecChildInfos.end());
 
-    for (auto& info : vecChildInfos)
+    for (const auto& info : vecChildInfos)
     {
         if (info.bIsDir)
         {
@@ -1145,7 +1145,7 @@ BOOL CNTFSHelper::_Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vect
 
 BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos)
 {
-    for (auto datainfo : vecDataRunLists)
+    for (const auto& datainfo : vecDataRunLists)
     {
         PBYTE pBuffer = (PBYTE)VirtualAlloc(NULL, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (_GetAnySectionBuffer(datainfo.ui64BeginScluster * ONE_CLUSTER_SIZE, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE, pBuffer))
@@ -1238,7 +1238,7 @@ UINT CNTFSHelper::_GetFileDataByFileRecord(const PBYTE pFileRecordBuffer, PBYTE 
                     vecDataRunList.insert(vecDataRunList.end(), vecDataRunListIn20Attr.begin(), vecDataRunListIn20Attr.end());
                 }
                 UINT64 ui64AllFileDataSize = 0;
-                for (auto dataInfo : vecDataRunList)
+                for (const auto& dataInfo : vecDataRunList)
                 {
                     ui64AllFileDataSize += dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE;
                 }
@@ -1259,7 +1259,7 @@ UINT CNTFSHelper::_GetFileDataByFileRecord(const PBYTE pFileRecordBuffer, PBYTE 
         if (_GetDataRunBy80AttrFrom20Attr(pFileRecordBuffer, vecDataRunList))
         {
             UINT64 ui64AllFileDataSize = 0;
-            for (auto dataInfo : vecDataRunList)
+            for (const auto& dataInfo : vecDataRunList)
             {
                 ui64AllFileDataSize += dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE;
             }
@@ -1281,7 +1281,7 @@ BOOL CNTFSHelper::_BigFileBlockReadAndWrite(const std::vector<DataInfo>& vecData
 {
     // 正式开始读
     UINT64 ui64AllFileSize = 0;
-    for each (auto datainfo in vecDataRunList)
+    for (const auto& datainfo : vecDataRunList)
     {
         ui64AllFileSize += datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE;
     }
@@ -1292,7 +1292,7 @@ BOOL CNTFSHelper::_BigFileBlockReadAndWrite(const std::vector<DataInfo>& vecData
     double dPercent = 0;
     BOOL bTranCate = FALSE;
     UINT uiTime = 0;
-    for each (auto datainfo in vecDataRunList)
+    for (const auto& datainfo : vecDataRunList)
     {
         ++uiTime;
         UINT64 ui64FinishSize = 0;

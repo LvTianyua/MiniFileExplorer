@@ -149,7 +149,7 @@ BOOL CMFCApplication1Dlg::PreTranslateMessage(MSG* pMsg)
                 return S_OK;
             }
 
-            for (auto it : m_mapTreeItemDatas)
+            for (const auto& it : m_mapTreeItemDatas)
             {
                 if (it.second.ui64FileNum == ui64FileNum)
                 {
@@ -161,6 +161,18 @@ BOOL CMFCApplication1Dlg::PreTranslateMessage(MSG* pMsg)
                     break;
                 }
             }
+        }
+        else if (pMsg->wParam == L'C' && (::GetKeyState(VK_CONTROL) & 0x8000))
+        {
+            OnCopy();
+        }
+        else if (pMsg->wParam == L'X' && (::GetKeyState(VK_CONTROL) & 0x8000))
+        {
+            OnCut();
+        }
+        else if (pMsg->wParam == L'V' && (::GetKeyState(VK_CONTROL) & 0x8000))
+        {
+            OnTie();
         }
     }
 
@@ -190,7 +202,7 @@ void CMFCApplication1Dlg::ExpandAnyTreeItem(const HTREEITEM& hTreeItem)
     while (hChildTreeItem)
     {
         m_treeMain.DeleteItem(hChildTreeItem);
-        auto it = m_mapTreeItemDatas.find(hChildTreeItem);
+        const auto& it = m_mapTreeItemDatas.find(hChildTreeItem);
         if (it != m_mapTreeItemDatas.end())
         {
             m_mapTreeItemDatas.erase(it);
@@ -215,7 +227,7 @@ void CMFCApplication1Dlg::AddSubTreeItem(const HTREEITEM& hParentItem)
         if (CNTFSHelper::GetInstance())
         {
             std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
-            for each (auto driverName in vecDriverNames)
+            for (const auto& driverName : vecDriverNames)
             {
                 AddOneTreeItem(hParentItem, driverName + L"", 5, driverName);
             }
@@ -355,7 +367,7 @@ void CMFCApplication1Dlg::InitListFiles()
     if (CNTFSHelper::GetInstance())
     {
         std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
-        for each (auto driverName in vecDriverNames)
+        for (const auto& driverName : vecDriverNames)
         {
             FileAttrInfo attrInfo;
             attrInfo.bIsDir = TRUE;
@@ -499,7 +511,7 @@ void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString
         if (CNTFSHelper::GetInstance())
         {
             std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
-            for each (auto driverName in vecDriverNames)
+            for (const auto& driverName : vecDriverNames)
             {
                 FileAttrInfo attrInfo;
                 attrInfo.bIsDir = TRUE;
@@ -632,7 +644,7 @@ void CMFCApplication1Dlg::TreeSyncToList()
 
 void CMFCApplication1Dlg::ListSyncToTree(BOOL bExpand)
 {
-    for (auto it : m_mapTreeItemDatas)
+    for (const auto& it : m_mapTreeItemDatas)
     {
         if (it.second.ui64FileNum == m_ui64CurFileNum)
         {
@@ -711,7 +723,7 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
         return;
     }
 
-    for (auto it : m_mapTreeItemDatas)
+    for (const auto& it : m_mapTreeItemDatas)
     {
         if (it.second.ui64FileNum == ui64FileNum)
         {
@@ -871,7 +883,7 @@ void CMFCApplication1Dlg::OnDelete()
                     if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
                     {
                         BOOL bQuit = FALSE;
-                        for (auto info : m_vecCurChildAttrInfos)
+                        for (const auto& info : m_vecCurChildAttrInfos)
                         {
                             UINT64 ui64ParentFileNum = 0;
                             if (CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(info.ui64FileUniNum, ui64ParentFileNum) && ui64ParentFileNum != m_ui64CurFileNum)
@@ -907,9 +919,9 @@ void CMFCApplication1Dlg::OnCopy()
             m_ui64SrcFileNum = m_mapListItemDatas[nItem].ui64FileNum;
             m_ui64SrcFileSize = m_mapListItemDatas[nItem].ui64FileSize;
             m_strSrcFilePath = m_mapListItemDatas[nItem].strFilePath;
-        }
 
-        SetTieMenuItemEnable();
+            SetTieMenuItemEnable();
+        }
     }
 }
 
@@ -917,6 +929,11 @@ void CMFCApplication1Dlg::OnCopy()
 void CMFCApplication1Dlg::OnTie()
 {
     // TODO: 在此添加命令处理程序代码
+    if (!m_bCopying)
+    {
+        return;
+    }
+
     TCHAR szPath[MAX_PATH + 1] = { 0 };
     std::vector<FileAttrInfo> vecFileAttrInfos;
     if (CNTFSHelper::GetInstance())
@@ -1003,18 +1020,26 @@ void CMFCApplication1Dlg::OnTie()
         {
             DeleteFile(m_strSrcFilePath);
         }
+        // 这里可能有个文件记录更新延时的问题，就是文件已经创建成功了，但是文件记录还没更新，获取到的不对，
+        // 这里要一直刷新，直到文件记录获取成功为止
         while (true)
         {
             m_uiCurChildDirNum = 0;
             m_vecCurChildAttrInfos.clear();
             if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
             {
-                for (auto info : m_vecCurChildAttrInfos)
+                BOOL bFinish = FALSE;
+                for (const auto& info : m_vecCurChildAttrInfos)
                 {
                     if (info.strFilePath.Compare(szPath) == 0)
                     {
+                        bFinish = TRUE;
                         break;
                     }
+                }
+                if (bFinish)
+                {
+                    break;
                 }
             }
             Sleep(100);
@@ -1048,9 +1073,9 @@ void CMFCApplication1Dlg::OnCut()
             m_ui64SrcFileNum = m_mapListItemDatas[nItem].ui64FileNum;
             m_ui64SrcFileSize = m_mapListItemDatas[nItem].ui64FileSize;
             m_strSrcFilePath = m_mapListItemDatas[nItem].strFilePath;
-        }
 
-        SetTieMenuItemEnable();
+            SetTieMenuItemEnable();
+        }
     }
 }
 
@@ -1058,6 +1083,11 @@ void CMFCApplication1Dlg::OnCut()
 void CMFCApplication1Dlg::OnTie2()
 {
     // TODO: 在此添加命令处理程序代码
+    if (!m_bCopying)
+    {
+        return;
+    }
+
     TCHAR szPath[MAX_PATH + 1] = { 0 };
     std::vector<FileAttrInfo> vecFileAttrInfos;
     if (CNTFSHelper::GetInstance() )
@@ -1153,7 +1183,7 @@ void CMFCApplication1Dlg::OnTie2()
             if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
             {
                 BOOL bFinish = FALSE;
-                for (auto info : m_vecCurChildAttrInfos)
+                for (const auto& info : m_vecCurChildAttrInfos)
                 {
                     if (info.strFilePath.Compare(szPath) == 0)
                     {
