@@ -20,6 +20,24 @@ typedef struct _ItemData
     UINT uiChildDirNum = 0;                    // 当前item子Dir数量
 }ItemData, *PItemData;
 
+class  CMyTree : public CTreeCtrl
+{
+public:
+    CMyTree() = default;
+    ~CMyTree() = default;
+
+    DECLARE_MESSAGE_MAP()
+
+public:
+    afx_msg void OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+    afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+    BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
+    void SetRedraw(BOOL bRedraw = TRUE);
+
+private:
+    BOOL m_bCanRedraw = FALSE;
+};
+
 // CMFCApplication1Dlg 对话框
 class CMFCApplication1Dlg : public CDialogEx
 {
@@ -105,7 +123,7 @@ protected:
 
 private:
     // 左侧导航树
-    CTreeCtrl m_treeMain;
+    CMyTree m_treeMain;
     // 右侧文件列表
     CListCtrl m_listFiles;
     // 当前路径显示
@@ -144,4 +162,7 @@ private:
     CMenu m_menu;
     CMenu* m_menuRButton1 = nullptr;
     CMenu* m_menuRButton2 = nullptr;
+public:
+    afx_msg void OnTvnItemexpandedTree1(NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg void OnWindowPosChanged(WINDOWPOS* lpwndpos);
 };
