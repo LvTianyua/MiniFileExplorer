@@ -17,44 +17,10 @@
 
 // CMFCApplication1Dlg 对话框
 
-#define ONE_TIME_INSERT_LIST_SIZE 1000
+#define ONE_TIME_INSERT_LIST_SIZE 100
 #define ONE_TIME_INSERT_TREE_SIZE 10000
 #define MSG_ASYNC_ADD_TREE_ITEM     WM_USER + 20001 
 
-BEGIN_MESSAGE_MAP(CMyTree, CTreeCtrl)
-    ON_WM_VSCROLL()
-    ON_WM_HSCROLL()
-END_MESSAGE_MAP()
-
-void CMyTree::OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
-{
-    SetRedraw(TRUE);
-    CTreeCtrl::OnVScroll(nSBCode, nPos, pScrollBar);
-}
-
-void CMyTree::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
-{
-    SetRedraw(TRUE);
-    CTreeCtrl::OnHScroll(nSBCode, nPos, pScrollBar);
-}
-
-BOOL CMyTree::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
-{
-    if (GetScrollPos(SB_HORZ) != 0 || GetScrollPos(SB_VERT) != 0)
-    {
-        SetRedraw(TRUE);
-    }
-    return S_OK;
-}
-
-void CMyTree::SetRedraw(BOOL bRedraw /*= TRUE*/)
-{
-    if (m_bCanRedraw != bRedraw)
-    {
-        m_bCanRedraw = bRedraw;
-        CTreeCtrl::SetRedraw(m_bCanRedraw);
-    }
-}
 
 CMFCApplication1Dlg::CMFCApplication1Dlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_MFCAPPLICATION1_DIALOG, pParent)
@@ -72,7 +38,7 @@ void CMFCApplication1Dlg::DoDataExchange(CDataExchange* pDX)
 }
 
 BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
-// 	ON_WM_PAINT()
+ 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
     ON_NOTIFY(NM_DBLCLK, IDC_LIST2, &CMFCApplication1Dlg::OnNMDblclkList2)
     ON_BN_CLICKED(IDC_BUTTON1, &CMFCApplication1Dlg::OnBnClickedButton1)
@@ -94,8 +60,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
     ON_UPDATE_COMMAND_UI(ID_1_32781, &CMFCApplication1Dlg::OnUpdateCut)
     ON_NOTIFY(LVN_ENDSCROLL, IDC_LIST2, &CMFCApplication1Dlg::OnLvnEndScrollList2)
     ON_NOTIFY(TVN_ITEMEXPANDING, IDC_TREE1, &CMFCApplication1Dlg::OnTvnItemexpandingTree1)
-    ON_NOTIFY(TVN_ITEMEXPANDED, IDC_TREE1, &CMFCApplication1Dlg::OnTvnItemexpandedTree1)
-    ON_WM_WINDOWPOSCHANGED()
+    ON_NOTIFY(TVN_DELETEITEM, IDC_TREE1, &CMFCApplication1Dlg::OnTvnDeleteitemTree1)
 END_MESSAGE_MAP()
 
 
@@ -216,23 +181,12 @@ BOOL CMFCApplication1Dlg::PreTranslateMessage(MSG* pMsg)
     }
     else if (pMsg->message == WM_MOUSEWHEEL)
     {
-        CRect rc;
-        m_treeMain.GetWindowRect(&rc);
-        if (rc.PtInRect(pMsg->pt))
-        {
-            m_treeMain.OnMouseWheel(0, 0, pMsg->pt);
-        }
-    }
-    else if (pMsg->message == WM_PAINT)
-    {
-        if (pMsg->hwnd != m_treeMain.GetSafeHwnd())
-        {
-            OnPaint();
-        }
-        else
-        {
-            int a = 0;
-        }
+//         CRect rc;
+//         m_treeMain.GetWindowRect(&rc);
+//         if (rc.PtInRect(pMsg->pt))
+//         {
+//             m_treeMain.OnMouseWheel(0, 0, pMsg->pt);
+//         }
     }
 
     return S_OK;
@@ -261,11 +215,6 @@ void CMFCApplication1Dlg::ExpandAnyTreeItem(const HTREEITEM& hTreeItem)
     while (hChildTreeItem)
     {
         m_treeMain.DeleteItem(hChildTreeItem);
-        const auto& it = m_mapTreeItemDatas.find(hChildTreeItem);
-        if (it != m_mapTreeItemDatas.end())
-        {
-            m_mapTreeItemDatas.erase(it);
-        }
         hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
     }
     AddSubTreeItem(hTreeItem);
@@ -449,11 +398,12 @@ void CMFCApplication1Dlg::AddOneListItem(const FileAttrInfo& fileAttrInfo, const
     int iItemIndex = 0;
     // 设置文件图标
     int iIconIndex = -1;
+    SHFILEINFO info = GetFileBaseInfo(fileAttrInfo.strFilePath);
     if (!fileAttrInfo.bIsDir)
     {
         if (m_mapExtIndex.find(fileAttrInfo.strFilePath) == m_mapExtIndex.end())
         {
-            m_listImageList.Add(GetFileBaseInfo(fileAttrInfo.strFilePath).hIcon);
+            m_listImageList.Add(info.hIcon);
             m_mapExtIndex.insert(std::make_pair(fileAttrInfo.strFilePath, m_listImageList.GetImageCount() - 1));
         }
         iIconIndex = m_mapExtIndex[fileAttrInfo.strFilePath];
@@ -486,7 +436,8 @@ void CMFCApplication1Dlg::AddOneListItem(const FileAttrInfo& fileAttrInfo, const
     m_listFiles.SetItemText(iItemIndex, 1, TimeToString(fileAttrInfo.stFileModifyTime));
 
     // 第三列类型
-    m_listFiles.SetItemText(iItemIndex, 2, fileAttrInfo.ui64FileUniNum == 5 ? L"NTFS卷" : (fileAttrInfo.bIsDir ? L"文件夹" : GetFileBaseInfo(fileAttrInfo.strFilePath).szTypeName));
+    m_listFiles.SetItemText(iItemIndex, 2, fileAttrInfo.ui64FileUniNum == 5 ? L"NTFS卷" : (fileAttrInfo.bIsDir ? L"文件夹" : info.szTypeName));
+    DestroyIcon(info.hIcon);
 
     // 第四列大小
     m_listFiles.SetItemText(iItemIndex, 3, fileAttrInfo.bIsDir ? L"" : SizeToString(fileAttrInfo.ui64FileSize));
@@ -674,7 +625,7 @@ CString CMFCApplication1Dlg::SizeToString(const UINT64& ui64FileSize)
 SHFILEINFO CMFCApplication1Dlg::GetFileBaseInfo(const CString& strExtName)
 {
     SHFILEINFO infoFile;
-    SHGetFileInfo(strExtName,
+    SHGetFileInfo(strExtName.IsEmpty() ? L"file" : strExtName,
         FILE_ATTRIBUTE_NORMAL,
         &infoFile,
         sizeof(infoFile),
@@ -1339,37 +1290,19 @@ void CMFCApplication1Dlg::OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResul
     }
 }
 
-void CMFCApplication1Dlg::OnTvnItemexpandedTree1(NMHDR *pNMHDR, LRESULT *pResult)
+void CMFCApplication1Dlg::OnTvnDeleteitemTree1(NMHDR *pNMHDR, LRESULT *pResult)
 {
     LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
     // TODO: 在此添加控件通知处理程序代码
     *pResult = 0;
-    m_treeMain.Invalidate();
-}
 
-void CMFCApplication1Dlg::OnWindowPosChanged(WINDOWPOS* lpwndpos)
-{
-    CDialogEx::OnWindowPosChanged(lpwndpos);
-
-    // TODO: 在此处添加消息处理程序代码
-    static int nX = 0;
-    static int nY = 0;
-    static bool bOnce = true;
-
-    if (nX != lpwndpos->x || nY != lpwndpos->y)
+    if (pNMTreeView)
     {
-        m_treeMain.SetRedraw(FALSE);
-        bOnce = true;
-    }
-    else
-    {
-        if (bOnce)
+        HTREEITEM hItem = pNMTreeView->itemOld.hItem;
+        auto it = m_mapTreeItemDatas.find(hItem);
+        if (it != m_mapTreeItemDatas.end())
         {
-            m_treeMain.SetRedraw(TRUE);
-            bOnce = false;
+            m_mapTreeItemDatas.erase(it);
         }
     }
-
-    nX = lpwndpos->x;
-    nY = lpwndpos->y;
 }
