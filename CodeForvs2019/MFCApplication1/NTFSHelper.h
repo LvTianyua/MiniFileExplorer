@@ -134,6 +134,9 @@ protected:
     // 从文件记录里面读取20属性中的80属性对应的文件记录中的daturun列表
     BOOL _GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunInfos);
 
+    // 从80datarun中读取指定文件号的文件记录
+    BOOL _GetFileBufferByFileNumFrom80DataRun(const std::vector<DataInfo>& vecDataRun, const UINT64 ui64FileNum, PBYTE pFileRecordBuffer);
+
 private:
     CString                                         m_strCurDriverName;                // 当前打开的盘符
     HANDLE                                          m_hanCurDriver = NULL;             // 当前盘符句柄

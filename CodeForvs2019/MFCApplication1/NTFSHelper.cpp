@@ -11,6 +11,7 @@
 #define ONE_CLUSTER_SIZE            8 * 512     //单簇大小（字节）
 #define ONE_FILE_RECORD_SIZE        1024        //单文件记录大小（字节）
 #define ONE_FILE_BLOCK_SIZE         4 * 1024 * 1024 //单文件分块大小（字节）
+#define ONE_TIME_READ_MFT_SIZE      100*1024*1024 //读mft一次读大小（字节）
 
 CNTFSHelper::~CNTFSHelper()
 {
@@ -195,27 +196,50 @@ BOOL CNTFSHelper::_GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYT
     // 2.根据dbr获取MFT首地址
     UINT64 ui64MFTSPos = _GetMFTStartPositionByDBR(dbrInfo);
 
-    // 3.开始遍历寻找第ui64FileRefNum项
-    UINT64 ui64Num = 0;
-    while (ui64Num <= ui64MFTSPos)
+    // 3.截取1024字节就是MFT文件记录
+    BYTE bufferMFT[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+    if (_GetAnySectionBuffer(ui64MFTSPos, ONE_FILE_RECORD_SIZE, bufferMFT))
     {
-        // 读磁盘判断当前遍历到的首地址是不是0，要是0就偏移到下个1024（一个文件记录长，直到遍历到需要的位置）
-        BYTE buffer[ONE_FILE_RECORD_SIZE + 1];
-        ZeroMemory(buffer, ONE_FILE_RECORD_SIZE + 1);
-        if (_GetAnySectionBuffer(ui64MFTSPos, ONE_FILE_RECORD_SIZE, buffer))
+        // 4.找到80属性，解析datarun
+        std::vector<DataInfo> vecDataRunlist;
+        UINT uiSpos = 0;
+        UINT uiLength = 0;
+        if (_FindAnyAttrSPosByFileRecord(bufferMFT, 0x80, uiSpos, uiLength))
         {
-            if (buffer[0] != 0)
+            UINT uiDataRunSPos = uiSpos + 0x40;
+            UINT uiDataRunLength = uiLength - 0x40;
+            if (_GetDataRunList(bufferMFT, uiDataRunSPos, uiDataRunLength, vecDataRunlist))
             {
-                if (ui64Num == ui64FileRefNum)
+                if (_GetFileBufferByFileNumFrom80DataRun(vecDataRunlist, ui64FileRefNum, pBuffer))
                 {
-                    memcpy(pBuffer, &buffer, ONE_FILE_RECORD_SIZE);
+                    // 判断一下文件参考号，做下校准
+                    UINT uiFileNum = 0;
+                    memcpy(&uiFileNum, &pBuffer[0x2C], 4);
+                    if (uiFileNum != ui64FileRefNum)
+                    {
+                        return FALSE;
+                    }
+                    // 4.做fix
+                    UINT uiFileRecordRealSize = 0;
+                    memcpy(&uiFileRecordRealSize, &pBuffer[0x18], 4);
+                    if (uiFileRecordRealSize > ONE_SECTOR_SIZE)
+                    {
+                        unsigned short usTmp = 0;
+                        memcpy(&usTmp, &pBuffer[0x32], 2);
+                        memcpy(&pBuffer[510], &usTmp, 2);
+                    }
+                    if (uiFileRecordRealSize == ONE_FILE_RECORD_SIZE)
+                    {
+                        unsigned short usTmp = 0;
+                        memcpy(&usTmp, &pBuffer[0x34], 2);
+                        memcpy(&pBuffer[1022], &usTmp, 2);
+                    }
                     return TRUE;
                 }
-                ++ui64Num;
             }
-            ui64MFTSPos += ONE_FILE_RECORD_SIZE;
         }
     }
+
     return FALSE;
 }
 
@@ -337,7 +361,7 @@ BOOL CNTFSHelper::_Get30HAttrSPosFrom20HAttr(const PBYTE pRecordBuffer, UINT& ui
                 continue;
             }
 
-            if (_GetFileRecordByFileRefNum(ui64FileNum, pNewRecordBuffer))
+            if (_GetFileRecordByFileRefNum2(ui64FileNum, pNewRecordBuffer))
             {
                 ui30HSpos = 0;
                 return _Get30HAttrSPosByFileRecord(pNewRecordBuffer, ui30HSpos);
@@ -404,7 +428,7 @@ BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std
             }
 
             BYTE newRecordBuffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-            if (_GetFileRecordByFileRefNum(ui64FileNum, newRecordBuffer))
+            if (_GetFileRecordByFileRefNum2(ui64FileNum, newRecordBuffer))
             {
                 // 遍历datarun，拿到全部簇流的起始位置和占用长度（单位：簇）
                 std::vector<DataInfo> vecDataRunLists;
@@ -479,7 +503,7 @@ BOOL CNTFSHelper::_Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std
             }
 
             BYTE newRecordBuffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-            if (_GetFileRecordByFileRefNum(ui64FileNum, newRecordBuffer))
+            if (_GetFileRecordByFileRefNum2(ui64FileNum, newRecordBuffer))
             {
                 if (_Get90HAttrChildAttrInfos(newRecordBuffer, vecChildAttrInfos))
                 {
@@ -650,7 +674,7 @@ BOOL CNTFSHelper::_GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer,
     UINT64 ui64AttrSign = 0;
     memcpy(&ui64AttrSign, &pDataRunBuffer[uiIndexSPos + 0x48], 8);
     // 先判断是不是系统且隐藏文件，系统文件不显示，不记录
-    if (ui64AttrSign == 0 || (ui64AttrSign & 0x0006) == 0x0006)
+    if ((ui64AttrSign & 0x0006) == 0x0006)
     {
         return FALSE;
     }
@@ -684,7 +708,7 @@ BOOL CNTFSHelper::_GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer,
 
     // 6.递归获取全路径
     BYTE recordBuffer[ONE_FILE_RECORD_SIZE + 1];
-    if (_GetFileRecordByFileRefNum(fileAttrInfo.ui64FileUniNum, recordBuffer))
+    if (_GetFileRecordByFileRefNum2(fileAttrInfo.ui64FileUniNum, recordBuffer))
     {
         return _AutoGetFullPath(recordBuffer, fileAttrInfo.strFilePath);
     }
@@ -918,7 +942,7 @@ BOOL CNTFSHelper::_GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::
             }
 
             BYTE newRecordBuffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-            if (_GetFileRecordByFileRefNum(ui64FileNum, newRecordBuffer))
+            if (_GetFileRecordByFileRefNum2(ui64FileNum, newRecordBuffer))
             {
                 UINT ui80AttrSPos = 0;
                 UINT ui80AttrLength = 0;
@@ -943,12 +967,72 @@ BOOL CNTFSHelper::_GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::
     return !vecDataRunInfos.empty();
 }
 
+BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const std::vector<DataInfo>& vecDataRunList, const UINT64 ui64FileNum, PBYTE pFileRecordBuffer)
+{
+    for (const auto& datarun : vecDataRunList)
+    {
+        // 从每个datarun里面读出第一个文件记录的参考号，如果比当前的大，跳出循环，从上一个datarun里面截取对应的文件记录
+        PBYTE pDataRunBuffer = new BYTE[datarun.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1];
+        ZeroMemory(pDataRunBuffer, datarun.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1);
+        if (_GetAnySectionBuffer(datarun.ui64BeginScluster * ONE_CLUSTER_SIZE, datarun.ui64UsedSclusters * ONE_CLUSTER_SIZE, pDataRunBuffer))
+        {
+            UINT uiFinalFileNum = 0;
+            memcpy(&uiFinalFileNum, &pDataRunBuffer[datarun.ui64UsedSclusters * ONE_CLUSTER_SIZE - ONE_FILE_RECORD_SIZE + 0x2C], 4);
+            if (uiFinalFileNum > ui64FileNum)
+            {
+                UINT uiFirstFileNum = 0;
+                memcpy(&uiFirstFileNum, &pDataRunBuffer[0x2C], 4);
+                if (uiFirstFileNum < ui64FileNum)
+                {
+					for (UINT ui = 0; ui < datarun.ui64UsedSclusters * ONE_CLUSTER_SIZE; ui += ONE_FILE_RECORD_SIZE)
+					{
+						UINT uiFileNum = 0;
+						memcpy(&uiFileNum, &pDataRunBuffer[ui + 0x2C], 4);
+						if (uiFileNum == ui64FileNum)
+						{
+							memcpy(pFileRecordBuffer, &pDataRunBuffer[ui], ONE_FILE_RECORD_SIZE);
+							if (pDataRunBuffer)
+							{
+                                delete[] pDataRunBuffer;
+                                pDataRunBuffer = nullptr;
+							}
+							return TRUE;
+						}
+					}
+					if (pDataRunBuffer)
+					{
+						delete[] pDataRunBuffer;
+						pDataRunBuffer = nullptr;
+					}
+                    return FALSE;
+                }
+            }
+        }
+        else
+        {
+			if (pDataRunBuffer)
+			{
+				delete[] pDataRunBuffer;
+				pDataRunBuffer = nullptr;
+			}
+            return FALSE;
+        }
+		if (pDataRunBuffer)
+		{
+			delete[] pDataRunBuffer;
+			pDataRunBuffer = nullptr;
+		}
+    }
+
+    return FALSE;
+}
+
 BOOL CNTFSHelper::MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64SrcFileSize, const CString& strDestPath)
 {
     // 1.读取源文件文件记录
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1];
     ZeroMemory(buffer, ONE_FILE_RECORD_SIZE + 1);
-    if (_GetFileRecordByFileRefNum(ui64SrcFileNum, buffer))
+    if (_GetFileRecordByFileRefNum2(ui64SrcFileNum, buffer))
     {
         // 2.根据源文件大小，判断需不需要分块读写，不分块就直接开辟空间，一次性读出来，再一次性写到目标路径
         std::vector<DataInfo> vecDataInfos;
@@ -986,7 +1070,7 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
     // 1.根据当前dir文件参考号获取对应文件记录
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1];
     ZeroMemory(buffer, ONE_FILE_RECORD_SIZE + 1);
-    if (_GetFileRecordByFileRefNum(ui64ParentRefNum, buffer))
+    if (_GetFileRecordByFileRefNum2(ui64ParentRefNum, buffer))
     {
         UINT uiAttrSPos = 0;
         UINT uiAttrLength = 0;
@@ -1043,8 +1127,8 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
             }
             else if (bHave20HAttr)
             {
-				vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-				_SortChildInfos(vecChildAttrInfos, uiDirNum);
+                vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
+                _SortChildInfos(vecChildAttrInfos, uiDirNum);
                 return TRUE;
             }
         }
@@ -1064,7 +1148,7 @@ BOOL CNTFSHelper::GetParentFileNumByFileNum(const UINT64& ui64FileNum, UINT64& u
     // 从30属性读父参考号
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1];
     ZeroMemory(buffer, ONE_FILE_RECORD_SIZE + 1);
-    if (_GetFileRecordByFileRefNum(ui64FileNum, buffer))
+    if (_GetFileRecordByFileRefNum2(ui64FileNum, buffer))
     {
         UINT uiAttrSPos = 0;
         UINT uiAttrLength = 0;
@@ -1082,7 +1166,7 @@ BOOL CNTFSHelper::GetParentFileNumByFileNum(const UINT64& ui64FileNum, UINT64& u
 BOOL CNTFSHelper::GetFilePathByFileNum(const UINT64& ui64FileNum, CString& strFilePath)
 {
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = {0};
-    if (_GetFileRecordByFileRefNum(ui64FileNum, buffer))
+    if (_GetFileRecordByFileRefNum2(ui64FileNum, buffer))
     {
         return _AutoGetFullPath(buffer, strFilePath);
     }
@@ -1493,7 +1577,7 @@ BOOL CNTFSHelper::_AutoGetFullPath(const PBYTE pRecordBuffer, CString& strPath)
                 // 3.获取父目录文件记录
                 BYTE byParentBuffer[ONE_FILE_RECORD_SIZE + 1];
                 ZeroMemory(byParentBuffer, ONE_FILE_RECORD_SIZE + 1);
-                if (_GetFileRecordByFileRefNum(ui64ParentFileNum, byParentBuffer))
+                if (_GetFileRecordByFileRefNum2(ui64ParentFileNum, byParentBuffer))
                 {
                     return _AutoGetFullPath(byParentBuffer, strPath);
                 }

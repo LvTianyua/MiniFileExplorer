@@ -20,6 +20,7 @@ typedef struct _ItemData
     UINT uiChildDirNum = 0;                    // 当前item子Dir数量
 }ItemData, *PItemData;
 
+
 // CMFCApplication1Dlg 对话框
 class CMFCApplication1Dlg : public CDialogEx
 {
@@ -56,6 +57,7 @@ public:
     afx_msg void OnUpdateCut(CCmdUI *pCmdUI);
     afx_msg void OnLvnEndScrollList2(NMHDR *pNMHDR, LRESULT *pResult);
     afx_msg void OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg void OnTvnDeleteitemTree1(NMHDR *pNMHDR, LRESULT *pResult);
 
 // 实现
 protected:

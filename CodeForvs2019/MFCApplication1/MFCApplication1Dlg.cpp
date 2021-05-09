@@ -17,9 +17,10 @@
 
 // CMFCApplication1Dlg 对话框
 
-#define ONE_TIME_INSERT_LIST_SIZE 1000
+#define ONE_TIME_INSERT_LIST_SIZE 100
 #define ONE_TIME_INSERT_TREE_SIZE 10000
 #define MSG_ASYNC_ADD_TREE_ITEM     WM_USER + 20001 
+
 
 CMFCApplication1Dlg::CMFCApplication1Dlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_MFCAPPLICATION1_DIALOG, pParent)
@@ -37,7 +38,7 @@ void CMFCApplication1Dlg::DoDataExchange(CDataExchange* pDX)
 }
 
 BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
-	ON_WM_PAINT()
+ 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
     ON_NOTIFY(NM_DBLCLK, IDC_LIST2, &CMFCApplication1Dlg::OnNMDblclkList2)
     ON_BN_CLICKED(IDC_BUTTON1, &CMFCApplication1Dlg::OnBnClickedButton1)
@@ -59,6 +60,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
     ON_UPDATE_COMMAND_UI(ID_1_32781, &CMFCApplication1Dlg::OnUpdateCut)
     ON_NOTIFY(LVN_ENDSCROLL, IDC_LIST2, &CMFCApplication1Dlg::OnLvnEndScrollList2)
     ON_NOTIFY(TVN_ITEMEXPANDING, IDC_TREE1, &CMFCApplication1Dlg::OnTvnItemexpandingTree1)
+    ON_NOTIFY(TVN_DELETEITEM, IDC_TREE1, &CMFCApplication1Dlg::OnTvnDeleteitemTree1)
 END_MESSAGE_MAP()
 
 
@@ -75,6 +77,8 @@ BOOL CMFCApplication1Dlg::OnInitDialog()
     DWORD dwStyle = GetWindowLong(m_hWnd, GWL_STYLE);
     dwStyle &= ~WS_THICKFRAME;
     SetWindowLong(m_hWnd, GWL_STYLE, dwStyle);
+
+    SetMenu(NULL);
 	ShowWindow(SW_SHOWNORMAL);
 
 	// TODO: 在此添加额外的初始化代码
@@ -202,11 +206,6 @@ void CMFCApplication1Dlg::ExpandAnyTreeItem(const HTREEITEM& hTreeItem)
     while (hChildTreeItem)
     {
         m_treeMain.DeleteItem(hChildTreeItem);
-        const auto& it = m_mapTreeItemDatas.find(hChildTreeItem);
-        if (it != m_mapTreeItemDatas.end())
-        {
-            m_mapTreeItemDatas.erase(it);
-        }
         hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
     }
     AddSubTreeItem(hTreeItem);
@@ -321,7 +320,14 @@ HTREEITEM CMFCApplication1Dlg::AddOneTreeItem(const HTREEITEM& hParentItem, cons
     ItemData itemData;
     itemData.strLocalDriverName = strDriverName;
     itemData.ui64FileNum = ui64FileNum;
-    m_mapTreeItemDatas.insert(std::make_pair(hItem, itemData));
+    if (m_mapTreeItemDatas.find(hItem) != m_mapTreeItemDatas.end())
+    {
+        m_mapTreeItemDatas[hItem] = itemData;
+    }
+    else
+    {
+        m_mapTreeItemDatas.insert(std::make_pair(hItem, itemData));
+    }
     return hItem;
 }
 
@@ -383,11 +389,12 @@ void CMFCApplication1Dlg::AddOneListItem(const FileAttrInfo& fileAttrInfo, const
     int iItemIndex = 0;
     // 设置文件图标
     int iIconIndex = -1;
+    SHFILEINFO info = GetFileBaseInfo(fileAttrInfo.strFilePath);
     if (!fileAttrInfo.bIsDir)
     {
         if (m_mapExtIndex.find(fileAttrInfo.strFilePath) == m_mapExtIndex.end())
         {
-            m_listImageList.Add(GetFileBaseInfo(fileAttrInfo.strFilePath).hIcon);
+            m_listImageList.Add(info.hIcon);
             m_mapExtIndex.insert(std::make_pair(fileAttrInfo.strFilePath, m_listImageList.GetImageCount() - 1));
         }
         iIconIndex = m_mapExtIndex[fileAttrInfo.strFilePath];
@@ -420,7 +427,8 @@ void CMFCApplication1Dlg::AddOneListItem(const FileAttrInfo& fileAttrInfo, const
     m_listFiles.SetItemText(iItemIndex, 1, TimeToString(fileAttrInfo.stFileModifyTime));
 
     // 第三列类型
-    m_listFiles.SetItemText(iItemIndex, 2, fileAttrInfo.bIsDir ? L"文件夹" : GetFileBaseInfo(fileAttrInfo.strFilePath).szTypeName);
+    m_listFiles.SetItemText(iItemIndex, 2, fileAttrInfo.ui64FileUniNum == 5 ? L"NTFS卷" : (fileAttrInfo.bIsDir ? L"文件夹" : info.szTypeName));
+    DestroyIcon(info.hIcon);
 
     // 第四列大小
     m_listFiles.SetItemText(iItemIndex, 3, fileAttrInfo.bIsDir ? L"" : SizeToString(fileAttrInfo.ui64FileSize));
@@ -468,12 +476,12 @@ void CMFCApplication1Dlg::ShowChildList(const int& nItemIndex)
                 itemData.uiChildDirNum = m_uiCurChildDirNum;
                 UpdateOneItemChildDirNum(itemData);
 
-                int nNeedInsertNum = min(m_vecCurChildAttrInfos.size(), ONE_TIME_INSERT_LIST_SIZE);
-                for (UINT ui = 0; ui < nNeedInsertNum; ++ui)
+                UINT uiNeedInsertNum = min(m_vecCurChildAttrInfos.size(), ONE_TIME_INSERT_LIST_SIZE);
+                for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
                 {
                     AddOneListItem(m_vecCurChildAttrInfos[ui], itemData.strLocalDriverName);
                 }
-                if (nNeedInsertNum < m_vecCurChildAttrInfos.size())
+                if (uiNeedInsertNum < m_vecCurChildAttrInfos.size())
                 {
                     m_listFiles.RedrawWindow();
                 }
@@ -547,12 +555,12 @@ void CMFCApplication1Dlg::ShowChildList(const UINT64& ui64FileNum, const CString
                 itemData.uiChildDirNum = m_uiCurChildDirNum;
                 UpdateOneItemChildDirNum(itemData);
 
-                int nNeedInsertNum = min(m_vecCurChildAttrInfos.size(), ONE_TIME_INSERT_LIST_SIZE);
-                for (UINT ui = 0; ui < nNeedInsertNum; ++ui)
+                UINT uiNeedInsertNum = min(m_vecCurChildAttrInfos.size(), ONE_TIME_INSERT_LIST_SIZE);
+                for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
                 {
                     AddOneListItem(m_vecCurChildAttrInfos[ui], strDriverName);
                 }
-                if (nNeedInsertNum < m_vecCurChildAttrInfos.size())
+                if (uiNeedInsertNum < m_vecCurChildAttrInfos.size())
                 {
                     m_listFiles.RedrawWindow();
                 }
@@ -608,7 +616,7 @@ CString CMFCApplication1Dlg::SizeToString(const UINT64& ui64FileSize)
 SHFILEINFO CMFCApplication1Dlg::GetFileBaseInfo(const CString& strExtName)
 {
     SHFILEINFO infoFile;
-    SHGetFileInfo(strExtName,
+    SHGetFileInfo(strExtName.IsEmpty() ? L"file" : strExtName,
         FILE_ATTRIBUTE_NORMAL,
         &infoFile,
         sizeof(infoFile),
@@ -1244,16 +1252,14 @@ void CMFCApplication1Dlg::OnLvnEndScrollList2(NMHDR *pNMHDR, LRESULT *pResult)
     // 符号 _WIN32_IE 必须是 >= 0x0560。
     LPNMLVSCROLL pStateChanged = reinterpret_cast<LPNMLVSCROLL>(pNMHDR);
     // TODO: 在此添加控件通知处理程序代码
-    int iii = m_listFiles.GetTopIndex();
-    int iiiii = m_listFiles.GetCountPerPage();
-    int nCurVisibleMaxItem = m_listFiles.GetTopIndex() + (m_listFiles.GetCountPerPage() + 1);
-    int nAllItemCount = m_listFiles.GetItemCount();
-    if (nCurVisibleMaxItem == nAllItemCount && nAllItemCount < m_vecCurChildAttrInfos.size())
+    UINT uiCurVisibleMaxItem = m_listFiles.GetTopIndex() + (m_listFiles.GetCountPerPage() + 1);
+    UINT uiAllItemCount = m_listFiles.GetItemCount();
+    if (uiCurVisibleMaxItem == uiAllItemCount && uiAllItemCount < m_vecCurChildAttrInfos.size())
     {
-        int nNeedInsertNum = min((m_vecCurChildAttrInfos.size() - nAllItemCount), ONE_TIME_INSERT_LIST_SIZE);
-        for (UINT ui = 0; ui < nNeedInsertNum; ++ui)
+        UINT uiNeedInsertNum = min((m_vecCurChildAttrInfos.size() - uiAllItemCount), ONE_TIME_INSERT_LIST_SIZE);
+        for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
         {
-            AddOneListItem(m_vecCurChildAttrInfos[nAllItemCount + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
+            AddOneListItem(m_vecCurChildAttrInfos[uiAllItemCount + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
         }
     }
 
@@ -1272,6 +1278,22 @@ void CMFCApplication1Dlg::OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResul
         m_treeMain.SetRedraw(FALSE);
         ExpandAnyTreeItem(pNMTreeView->itemNew.hItem);
         m_treeMain.SetRedraw(TRUE);
-        m_treeMain.RedrawWindow();
+    }
+}
+
+void CMFCApplication1Dlg::OnTvnDeleteitemTree1(NMHDR *pNMHDR, LRESULT *pResult)
+{
+    LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
+    // TODO: 在此添加控件通知处理程序代码
+    *pResult = 0;
+
+    if (pNMTreeView)
+    {
+        HTREEITEM hItem = pNMTreeView->itemOld.hItem;
+        auto it = m_mapTreeItemDatas.find(hItem);
+        if (it != m_mapTreeItemDatas.end())
+        {
+            m_mapTreeItemDatas.erase(it);
+        }
     }
 }
