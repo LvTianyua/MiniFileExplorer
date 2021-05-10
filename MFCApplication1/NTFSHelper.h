@@ -2,6 +2,15 @@
 #include <vector>
 #include "SingleInstace.h"
 #include "INTFSHelper.h"
+#include <map>
+
+typedef struct _DataCompleteInfo
+{
+    DataInfo dataInfo;
+    UINT uiFirstFileNum = 0;
+    UINT uiFinalFileNum = 0;
+} DataCompleteInfo, *PDataCompleteInfo;
+
 
 class CNTFSHelper : public CSingleInstace<CNTFSHelper>, public INTFSHelper
 {
@@ -134,13 +143,45 @@ protected:
     // 从文件记录里面读取20属性中的80属性对应的文件记录中的daturun列表
     BOOL _GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunInfos);
 
-    // 从80datarun中读取指定文件号的文件记录
-    BOOL _GetFileBufferByFileNumFrom80DataRun(const std::vector<DataInfo>& vecDataRun, const UINT64 ui64FileNum, PBYTE pFileRecordBuffer);
+    // 从MFTdatarun中读取指定文件号的文件记录
+    BOOL _GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer);
+
+    // 初始化磁盘
+    BOOL _InitCurDriver();
+
+    void _ClearDataMapBuffer(const CString& strLastDriverName);
+
+    template<typename T>
+    void _SafeDelete(T* ptr) 
+    {
+        if (ptr)
+        {
+            delete ptr;
+            ptr = nullptr;
+        }
+    }
+
+    template<typename T>
+    void _SafeDeleteBuffer(T* ptr)
+    {
+        if (ptr)
+        {
+            delete[] ptr;
+            ptr = nullptr;
+        }
+    }
 
 private:
     CString                                         m_strCurDriverName;                // 当前打开的盘符
     HANDLE                                          m_hanCurDriver = NULL;             // 当前盘符句柄
     HWND                                            m_hProgressWnd = NULL;             // 进度条窗口句柄
     HANDLE                                          m_hFile = NULL;                    // 拷贝文件的句柄
+    std::map<DataInfo, PBYTE>                       m_mapDataInfoBuffer;               // 某一个datainfo对应的buffer
+    std::map<UINT64, PBYTE>                         m_mapFileNumRecordBuffer;          // 文件参考号对应文件记录集合
+    std::vector<DataCompleteInfo>                   m_vecMFTDataCompRunList;           // MFT的datarunlist
+    std::map<CString, std::vector<DataCompleteInfo>> m_mapDriverCompInfos;             // 磁盘，datarunlist映射
+    std::map<CString, std::map<DataInfo, PBYTE>>    m_mapDriverDataBuffers;            // 磁盘，databuffer映射
+    std::map<CString, std::map<UINT64, PBYTE>> m_mapDriverFileNumBuffers;              // 磁盘，FileNumBuffer映射
+    BOOL                                            m_bInit = FALSE;
 };
 
