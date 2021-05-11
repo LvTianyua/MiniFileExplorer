@@ -105,6 +105,10 @@ protected:
     // 设置粘贴按钮是否可用
     void SetTieMenuItemEnable();
 
+    // 弹个异步的提示框
+    void AsyncMesssageBox(const CString& strCaption, const CString& strText);
+    void CloseAsyncMessageBox(const CString& strCaption);
+
 private:
     // 左侧导航树
     CTreeCtrl m_treeMain;

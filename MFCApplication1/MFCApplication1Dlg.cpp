@@ -212,18 +212,27 @@ void CMFCApplication1Dlg::ExpandAnyTreeItem(const HTREEITEM& hTreeItem)
 {
     // 1.清空当前item全部子项，重新添加一遍
     HTREEITEM hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
-    while (hChildTreeItem)
+    if (m_mapTreeItemDatas.find(hChildTreeItem) != m_mapTreeItemDatas.end())
     {
-        m_treeMain.DeleteItem(hChildTreeItem);
-        hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
-    }
-    AddSubTreeItem(hTreeItem);
-
-    hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
-    while (hChildTreeItem)
-    {
-        AddOneTreeItem(hChildTreeItem, L"", -1, L"");
-        hChildTreeItem = m_treeMain.GetNextItem(hChildTreeItem, TVGN_NEXT);
+        if (m_mapTreeItemDatas[hChildTreeItem].ui64FileNum == -1)
+        {
+            m_treeMain.DeleteItem(hChildTreeItem);
+            AddSubTreeItem(hTreeItem);
+            hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
+            while (hChildTreeItem)
+            {
+                AddOneTreeItem(hChildTreeItem, L"", -1, L"");
+                hChildTreeItem = m_treeMain.GetNextItem(hChildTreeItem, TVGN_NEXT);
+            }
+        }
+        else if (m_mapTreeItemDatas[hChildTreeItem].ui64FileNum == 5)
+        {
+            while (hChildTreeItem)
+            {
+                AddOneTreeItem(hChildTreeItem, L"", -1, L"");
+                hChildTreeItem = m_treeMain.GetNextItem(hChildTreeItem, TVGN_NEXT);
+            }
+        }
     }
 }
 
@@ -234,7 +243,20 @@ void CMFCApplication1Dlg::AddSubTreeItem(const HTREEITEM& hParentItem)
     {
         if (CNTFSHelper::GetInstance())
         {
-            std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+            // 初始化之前，弹个提示
+            static bool bInit = true;
+            std::vector<CString> vecDriverNames;
+            if (bInit)
+            {
+                bInit = false;
+                AsyncMesssageBox(L"启动提示", L"初始化基本信息，拉取基本NTFS结构中...");
+                vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+                CloseAsyncMessageBox(L"启动提示");
+            }
+            else
+            {
+                vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+            }
             for (const auto& driverName : vecDriverNames)
             {
                 AddOneTreeItem(hParentItem, driverName + L"", 5, driverName);
@@ -705,6 +727,25 @@ void CMFCApplication1Dlg::SetTieMenuItemEnable()
     }
 }
 
+void CMFCApplication1Dlg::AsyncMesssageBox(const CString& strCaption, const CString& strText)
+{
+    std::thread([strCaption, strText]()
+    {
+        ::MessageBox(NULL, strText, strCaption, MB_OK);
+    }).detach();
+    BeginWaitCursor();
+}
+
+void CMFCApplication1Dlg::CloseAsyncMessageBox(const CString& strCaption)
+{
+    EndWaitCursor();
+    HWND hWnd = ::FindWindowEx(NULL, NULL, NULL, strCaption);
+    if (hWnd && ::IsWindow(hWnd))
+    {
+        ::PostMessage(hWnd, WM_CLOSE, 0, 0); //点击“确定”
+    }
+}
+
 void CMFCApplication1Dlg::OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult)
 {
     LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
@@ -880,7 +921,6 @@ void CMFCApplication1Dlg::OnOpen()
     }
 }
 
-
 void CMFCApplication1Dlg::OnDelete()
 {
     // TODO: 在此添加命令处理程序代码
@@ -890,38 +930,35 @@ void CMFCApplication1Dlg::OnDelete()
         if (m_mapListItemDatas.find(nItem) != m_mapListItemDatas.end())
         {
             DeleteFile(m_mapListItemDatas[nItem].strFilePath);
-            CString strParentPath;
-            if (CNTFSHelper::GetInstance()->GetFilePathByFileNum(m_ui64CurFileNum, strParentPath))
+            AsyncMesssageBox(L"删除提示", L"文件删除完成，正在重新拉取NTFS文件结构...");
+            while (true)
             {
-                while (true)
+                Sleep(500);
+                m_uiCurChildDirNum = 0;
+                m_vecCurChildAttrInfos.clear();
+                if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum, TRUE))
                 {
-                    m_uiCurChildDirNum = 0;
-                    m_vecCurChildAttrInfos.clear();
-                    if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
+                    BOOL bQuit = FALSE;
+                    for (const auto& info : m_vecCurChildAttrInfos)
                     {
-                        BOOL bQuit = FALSE;
-                        for (const auto& info : m_vecCurChildAttrInfos)
+                        UINT64 ui64ParentFileNum = 0;
+                        if ((CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(info.ui64FileUniNum, ui64ParentFileNum) && ui64ParentFileNum != m_ui64CurFileNum) || info.strFilePath.Compare(m_mapListItemDatas[nItem].strFilePath) == 0)
                         {
-                            UINT64 ui64ParentFileNum = 0;
-                            if (CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(info.ui64FileUniNum, ui64ParentFileNum) && ui64ParentFileNum != m_ui64CurFileNum)
-                            {
-                                bQuit = TRUE;
-                                break;
-                            }
-                        }
-                        if (!bQuit)
-                        {
-                            ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+                            bQuit = TRUE;
                             break;
                         }
                     }
-                    Sleep(100);
+                    if (!bQuit)
+                    {
+                        ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+                        break;
+                    }
                 }
             }
+            CloseAsyncMessageBox(L"删除提示");
         }
     }
 }
-
 
 void CMFCApplication1Dlg::OnCopy()
 {
@@ -1039,29 +1076,31 @@ void CMFCApplication1Dlg::OnTie()
         }
         // 这里可能有个文件记录更新延时的问题，就是文件已经创建成功了，但是文件记录还没更新，获取到的不对，
         // 这里要一直刷新，直到文件记录获取成功为止
-        while (true)
-        {
-            m_uiCurChildDirNum = 0;
-            m_vecCurChildAttrInfos.clear();
-            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
-            {
-                BOOL bFinish = FALSE;
-                for (const auto& info : m_vecCurChildAttrInfos)
-                {
-                    if (info.strFilePath.Compare(szPath) == 0)
-                    {
-                        bFinish = TRUE;
-                        break;
-                    }
-                }
-                if (bFinish)
-                {
-                    break;
-                }
-            }
-            Sleep(100);
-        }
-        ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+         AsyncMesssageBox(L"拷贝提示", L"文件数据拷贝完成，正在重新拉取NTFS文件结构...");
+         while (true)
+         {
+             Sleep(500);
+             m_uiCurChildDirNum = 0;
+             m_vecCurChildAttrInfos.clear();
+             if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum, TRUE))
+             {
+                 BOOL bFinish = FALSE;
+                 for (const auto& info : m_vecCurChildAttrInfos)
+                 {
+                     if (info.strFilePath.Compare(szPath) == 0)
+                     {
+                         bFinish = TRUE;
+                         break;
+                     }
+                 }
+                 if (bFinish)
+                 {
+                     break;
+                 }
+             }
+         }
+         ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+         CloseAsyncMessageBox(L"拷贝提示");
     }
     else
     {
@@ -1193,11 +1232,13 @@ void CMFCApplication1Dlg::OnTie2()
         }
         // 这里可能有个文件记录更新延时的问题，就是文件已经创建成功了，但是文件记录还没更新，获取到的不对，
         // 这里要一直刷新，直到文件记录获取成功为止
+        AsyncMesssageBox(L"拷贝提示", L"文件数据拷贝完成，正在重新拉取NTFS文件结构...");
         while (true)
         {
+            Sleep(500);
             m_uiCurChildDirNum = 0;
             m_vecCurChildAttrInfos.clear();
-            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
+            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum, TRUE))
             {
                 BOOL bFinish = FALSE;
                 for (const auto& info : m_vecCurChildAttrInfos)
@@ -1213,9 +1254,9 @@ void CMFCApplication1Dlg::OnTie2()
                     break;
                 }
             }
-            Sleep(100);
         }
         ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+        CloseAsyncMessageBox(L"拷贝提示");
     }
     else
     {

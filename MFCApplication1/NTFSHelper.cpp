@@ -53,18 +53,20 @@ std::vector<CString> CNTFSHelper::GetAllLogicDriversNames()
             }
         }
     }
-    if (!m_bInit)
-    {
-        m_bInit = TRUE;
-        CString strCurDriverName = m_strCurDriverName;
-        _ResetCurDriverInfo();
-        for (const auto& info : vecDriversNames)
-        {
-            SetCurDriverInfo(info);
-        }
-        _ResetCurDriverInfo();
-        SetCurDriverInfo(strCurDriverName);
-    }
+//     if (!m_bInit)
+//     {
+//         m_bInit = TRUE;
+//         CString strCurDriverName = m_strCurDriverName;
+//         _ResetCurDriverInfo();
+//         for (const auto& info : vecDriversNames)
+//         {
+//             SetCurDriverInfo(info);
+//             BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+//             _GetFileRecordByFileRefNum2(5, buffer);
+//         }
+//         _ResetCurDriverInfo();
+//         SetCurDriverInfo(strCurDriverName);
+//     }
     return vecDriversNames;
 }
 
@@ -199,7 +201,7 @@ BOOL CNTFSHelper::_GetFileRecordByFileRefNum(const UINT64& ui64FileRefNum, PBYTE
     return FALSE;
 }
 
-BOOL CNTFSHelper::_GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer)
+BOOL CNTFSHelper::_GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer, BOOL bFresh)
 {
     if (m_vecMFTDataCompRunList.empty())
     {
@@ -207,13 +209,13 @@ BOOL CNTFSHelper::_GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYT
     }
 
     // 先看缓存的文件号对应文件记录里面有没有，没有再去看缓存的DataInfo对应的DataBuffer
-    if (m_mapFileNumRecordBuffer.find(ui64FileRefNum) != m_mapFileNumRecordBuffer.end())
+    if (!bFresh && m_mapFileNumRecordBuffer.find(ui64FileRefNum) != m_mapFileNumRecordBuffer.end())
     {
         memcpy(pBuffer, m_mapFileNumRecordBuffer[ui64FileRefNum], ONE_FILE_RECORD_SIZE);
         return TRUE;
     }
 
-    if (_GetFileBufferByFileNumFrom80DataRun(ui64FileRefNum, pBuffer))
+    if (_GetFileBufferByFileNumFrom80DataRun(ui64FileRefNum, pBuffer, bFresh))
     {
         // 判断一下文件参考号，做下校准
         UINT uiFileNum = 0;
@@ -237,20 +239,23 @@ BOOL CNTFSHelper::_GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYT
             memcpy(&usTmp, &pBuffer[0x34], 2);
             memcpy(&pBuffer[1022], &usTmp, 2);
         }
-        if (m_mapFileNumRecordBuffer.find(ui64FileRefNum) != m_mapFileNumRecordBuffer.end())
+
+        bool bFirstInsert = false;
+        if (m_mapFileNumRecordBuffer.find(ui64FileRefNum) == m_mapFileNumRecordBuffer.end())
         {
-            _SafeDeleteBuffer(m_mapFileNumRecordBuffer[ui64FileRefNum]);
-            PBYTE pRecordBuffer = new BYTE[ONE_FILE_RECORD_SIZE + 1];
-            ZeroMemory(pRecordBuffer, ONE_FILE_RECORD_SIZE + 1);
-            memcpy(pRecordBuffer, pBuffer, ONE_FILE_RECORD_SIZE);
-            m_mapFileNumRecordBuffer[ui64FileRefNum] = pBuffer;
-        }
-        else
-        {
+            bFirstInsert = true;
             PBYTE pRecordBuffer = new BYTE[ONE_FILE_RECORD_SIZE + 1];
             ZeroMemory(pRecordBuffer, ONE_FILE_RECORD_SIZE + 1);
             memcpy(pRecordBuffer, pBuffer, ONE_FILE_RECORD_SIZE);
             m_mapFileNumRecordBuffer.insert(std::make_pair(ui64FileRefNum, pRecordBuffer));
+        }
+        if (bFresh && !bFirstInsert)
+        {
+            PBYTE pRecordBuffer = new BYTE[ONE_FILE_RECORD_SIZE + 1];
+            ZeroMemory(pRecordBuffer, ONE_FILE_RECORD_SIZE + 1);
+            memcpy(pRecordBuffer, pBuffer, ONE_FILE_RECORD_SIZE);
+            _SafeDeleteBuffer(m_mapFileNumRecordBuffer[ui64FileRefNum]);
+            m_mapFileNumRecordBuffer[ui64FileRefNum] = pRecordBuffer;
         }
         return TRUE;
     }
@@ -450,7 +455,13 @@ BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std
                 if (CNTFSHelper::GetInstance()->_GetA0HAttrDataRunLists(newRecordBuffer, vecDataRunLists))
                 {
                     // 从datarun获取所有子项
-                    if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(vecDataRunLists, vecChildAttrInfos))
+                    CString strParentPath;
+                    _AutoGetFullPath(newRecordBuffer, strParentPath);
+                    if (strParentPath == L".")
+                    {
+                        strParentPath = m_strCurDriverName + L":";
+                    }
+                    if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
                     {
                         //_SortChildInfos(vecChildAttrInfos, uiDirNum);
                         return TRUE;
@@ -721,12 +732,23 @@ BOOL CNTFSHelper::_GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer,
     // 5.实际大小
     memcpy(&(fileAttrInfo.ui64FileSize), &pDataRunBuffer[uiIndexSPos + 0x40], 8);
 
+    BYTE byNameLength = 0;
+    memcpy(&byNameLength, &pDataRunBuffer[uiIndexSPos + 0x50], 1);
+
+    TCHAR* pName = new TCHAR[2 * byNameLength + 2];
+    ZeroMemory(pName, 2 * byNameLength + 2);
+    memcpy(pName, &pDataRunBuffer[uiIndexSPos + 0x52], 2 * byNameLength);
+    fileAttrInfo.strFilePath = CString(pName);
+    _SafeDeleteBuffer(pName);
+
+    memcpy(&fileAttrInfo.byNameSpace, &pDataRunBuffer[uiIndexSPos + 0x51], 1);
+
     // 6.递归获取全路径
-    BYTE recordBuffer[ONE_FILE_RECORD_SIZE + 1] = {0};
-    if (_GetFileRecordByFileRefNum2(fileAttrInfo.ui64FileUniNum, recordBuffer))
-    {
-        return _AutoGetFullPath(recordBuffer, fileAttrInfo.strFilePath);
-    }
+//     BYTE recordBuffer[ONE_FILE_RECORD_SIZE + 1] = {0};
+//     if (_GetFileRecordByFileRefNum2(fileAttrInfo.ui64FileUniNum, recordBuffer))
+//     {
+//         return _AutoGetFullPath(recordBuffer, fileAttrInfo.strFilePath);
+//     }
 
     return TRUE;
 }
@@ -802,6 +824,17 @@ bool CompareFileAttrInfo(const FileAttrInfo& lInfo, const FileAttrInfo& rInfo)
     {
         if (rInfo.bIsDir)
         {
+            if (lInfo.ui64FileUniNum == rInfo.ui64FileUniNum)
+            {
+                if (lInfo.byNameSpace == 2)
+                {
+                    return false;
+                }
+                else if (rInfo.byNameSpace == 2)
+                {
+                    return true;
+                }
+            }
             return lInfo.ui64FileUniNum < rInfo.ui64FileUniNum;
         }
         else
@@ -817,6 +850,17 @@ bool CompareFileAttrInfo(const FileAttrInfo& lInfo, const FileAttrInfo& rInfo)
         }
         else
         {
+            if (lInfo.ui64FileUniNum == rInfo.ui64FileUniNum)
+            {
+                if (lInfo.byNameSpace == 2)
+                {
+                    return false;
+                }
+                else if (rInfo.byNameSpace == 2)
+                {
+                    return true;
+                }
+            }
             return lInfo.ui64FileUniNum < rInfo.ui64FileUniNum;
         }
     }
@@ -982,20 +1026,28 @@ BOOL CNTFSHelper::_GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::
     return !vecDataRunInfos.empty();
 }
 
-BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer)
+BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer, BOOL bFresh)
 {
-    // 先看看缓存里有没有这个文件记录，没有再去遍历
     UINT64 ui64FinishSize = 0;
-    for (const auto& info : m_mapDataInfoBuffer)
+    if (!bFresh)
     {
-        PBYTE pTmpBuffer = info.second;
-        UINT uiFinalFileNum = 0;
-        memcpy(&uiFinalFileNum, &pTmpBuffer[info.first.ui64UsedSclusters * ONE_CLUSTER_SIZE - ONE_FILE_RECORD_SIZE + 0x2C], 4);
-        if (uiFinalFileNum == 0 || uiFinalFileNum > ui64FileNum)
+        // 先看看缓存里有没有这个文件记录，没有再去遍历
+        for (const auto& info : m_mapDataInfoBuffer)
         {
             UINT uiFirstFileNum = 0;
-            memcpy(&uiFirstFileNum, &pTmpBuffer[0x2C], 4);
-            if (uiFirstFileNum < ui64FileNum)
+            UINT uiFinalFileNum = 0;
+            for (const auto& info1 : m_vecMFTDataCompRunList)
+            {
+                if (info1.dataInfo == info.first)
+                {
+                    uiFirstFileNum = info1.uiFirstFileNum;
+                    uiFinalFileNum = info1.uiFinalFileNum;
+                    break;
+                }
+            }
+
+            PBYTE pTmpBuffer = info.second;
+            if (uiFinalFileNum >= ui64FileNum && uiFirstFileNum <= ui64FileNum)
             {
                 for (UINT ui = ui64FileNum * ONE_FILE_RECORD_SIZE - ui64FinishSize; ui < info.first.ui64UsedSclusters * ONE_CLUSTER_SIZE; ui += ONE_FILE_RECORD_SIZE)
                 {
@@ -1014,16 +1066,14 @@ BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum,
                     }
                 }
             }
+            ui64FinishSize += info.first.ui64UsedSclusters * ONE_CLUSTER_SIZE;
         }
-        ui64FinishSize += info.first.ui64UsedSclusters * ONE_CLUSTER_SIZE;
     }
 
-    UINT uiTime = 0;
     ui64FinishSize = 0;
     for (const auto& info : m_vecMFTDataCompRunList)
     {
-        ++uiTime;
-        if (info.uiFirstFileNum <= ui64FileNum && (ui64FileNum <= info.uiFinalFileNum || uiTime == m_vecMFTDataCompRunList.size()))
+        if (info.uiFirstFileNum <= ui64FileNum && ui64FileNum <= info.uiFinalFileNum)
         {
             PBYTE pDataRunBuffer = new BYTE[info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1];
             ZeroMemory(pDataRunBuffer, info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1);
@@ -1040,10 +1090,6 @@ BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum,
                     if (uiFileNum < ui64FileNum)
                     {
                         ui += (ui64FileNum - uiFileNum - 1) * ONE_FILE_RECORD_SIZE;
-                        continue;
-                    }
-                    else if (uiFileNum > ui64FileNum)
-                    {
                         continue;
                     }
                     if (uiFileNum == ui64FileNum)
@@ -1084,6 +1130,12 @@ BOOL CNTFSHelper::_InitCurDriver()
         m_mapDataInfoBuffer = m_mapDriverDataBuffers[m_strCurDriverName];
         m_mapFileNumRecordBuffer = m_mapDriverFileNumBuffers[m_strCurDriverName];
         return TRUE;
+    }
+    else
+    {
+        m_vecMFTDataCompRunList.clear();
+        m_mapDataInfoBuffer.clear();
+        m_mapFileNumRecordBuffer.clear();
     }
 
     if (m_hanCurDriver != NULL)
@@ -1180,6 +1232,27 @@ BOOL CNTFSHelper::_InitCurDriver()
                                  }
                                  m_vecMFTDataCompRunList.push_back(comInfo);
                              }
+                             if (bSwap)
+                             {
+                                 std::swap(vecDataRunList[ui], vecDataRunList[ui + 1]);
+                             }
+                         }
+                     }
+                     if (m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].uiFinalFileNum == 0)
+                     {
+                         for (UINT64 ui64Spos = m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE - 2 * ONE_FILE_RECORD_SIZE; ui64Spos >= 0; ui64Spos -= ONE_FILE_RECORD_SIZE)
+                         {
+                             BYTE bufferTmp[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+                             if (_GetAnySectionBuffer(m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].dataInfo.ui64BeginScluster * ONE_CLUSTER_SIZE + ui64Spos, ONE_FILE_RECORD_SIZE, bufferTmp))
+                             {
+                                 UINT uiFileNumTmp = 0;
+                                 memcpy(&uiFileNumTmp, &bufferTmp[0x2C], 4);
+                                 if (uiFileNumTmp != 0)
+                                 {
+                                     m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].uiFinalFileNum = uiFileNumTmp;
+                                     break;
+                                 }
+                             }
                          }
                      }
                      m_mapDriverCompInfos.insert(std::make_pair(m_strCurDriverName, m_vecMFTDataCompRunList));
@@ -1234,11 +1307,30 @@ BOOL CNTFSHelper::MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64Src
     return FALSE;
 }
 
-BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum)
+BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum, BOOL bForceFresh/* = FALSE*/)
 {
+    if (bForceFresh)
+    {
+        if (m_mapDriverCompInfos.find(m_strCurDriverName) != m_mapDriverCompInfos.end())
+        {
+            m_mapDriverCompInfos.erase(m_mapDriverCompInfos.find(m_strCurDriverName));
+        }
+        for (const auto& info : m_mapDataInfoBuffer)
+        {
+            _SafeDeleteBuffer(info.second);
+        }
+        m_mapDataInfoBuffer.clear();
+        for (const auto& info : m_mapFileNumRecordBuffer)
+        {
+            _SafeDeleteBuffer(info.second);
+        }
+        m_mapFileNumRecordBuffer.clear();
+        _InitCurDriver();
+    }
+
     // 1.根据当前dir文件参考号获取对应文件记录
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = {0};
-    if (_GetFileRecordByFileRefNum2(ui64ParentRefNum, buffer))
+    if (_GetFileRecordByFileRefNum2(ui64ParentRefNum, buffer, bForceFresh))
     {
         UINT uiAttrSPos = 0;
         UINT uiAttrLength = 0;
@@ -1265,7 +1357,13 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
             if (CNTFSHelper::GetInstance()->_GetA0HAttrDataRunLists(buffer, vecDataRunLists))
             {
                 // 从datarun获取所有子项
-                if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(vecDataRunLists, vecChildAttrInfos))
+                CString strParentPath;
+                _AutoGetFullPath(buffer, strParentPath);
+                if (strParentPath == L".")
+                {
+                    strParentPath = m_strCurDriverName + L":";
+                }
+                if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
                 {
                     if (bHave20HAttr)
                     {
@@ -1394,31 +1492,15 @@ BOOL CNTFSHelper::_Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vect
     return TRUE;
 }
 
-BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos)
+BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const CString& strParentPath, const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos)
 {
     for (const auto& datainfo : vecDataRunLists)
     {
-        PBYTE pBuffer = nullptr;
-        if (m_mapDataInfoBuffer.find(datainfo) != m_mapDataInfoBuffer.end())
+        PBYTE pBuffer = new BYTE[datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1];
+        ZeroMemory(pBuffer, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1);
+        if (!_GetAnySectionBuffer(datainfo.ui64BeginScluster * ONE_CLUSTER_SIZE, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE, pBuffer))
         {
-            pBuffer = m_mapDataInfoBuffer[datainfo];
-        }
-        else
-        {
-            pBuffer = new BYTE[datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1];
-            ZeroMemory(pBuffer, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1);
-            if (_GetAnySectionBuffer(datainfo.ui64BeginScluster * ONE_CLUSTER_SIZE, datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE, pBuffer))
-            {
-                m_mapDataInfoBuffer.insert(std::make_pair(datainfo, pBuffer));
-            }
-            else
-            {
-                _SafeDeleteBuffer(pBuffer);
-                return FALSE;
-            }
-        }
-        if (pBuffer == nullptr)
-        {
+            _SafeDeleteBuffer(pBuffer);
             return FALSE;
         }
 
@@ -1443,6 +1525,9 @@ BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& ve
                 FileAttrInfo attrInfo;
                 if (_GetOneFileAttrInfoByDataRunBuffer(pBuffer, uiIndexSPos, attrInfo))
                 {
+                    CString strPath = strParentPath;
+                    PathAppend((LPWSTR)strPath.GetBuffer(0), attrInfo.strFilePath);
+                    attrInfo.strFilePath = strPath;
                     vecChildAttrInfos.push_back(attrInfo);
                 }
 
@@ -1451,6 +1536,7 @@ BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& ve
                 Sleep(0);
             }
         }
+        _SafeDeleteBuffer(pBuffer);
     }
 
     return TRUE;

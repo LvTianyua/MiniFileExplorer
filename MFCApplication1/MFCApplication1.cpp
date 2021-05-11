@@ -6,6 +6,9 @@
 #include "MFCApplication1.h"
 #include "MFCApplication1Dlg.h"
 
+#include <imagehlp.h>
+#pragma comment(lib, "DbgHelp.lib")
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -37,8 +40,29 @@ CMFCApplication1App theApp;
 
 // CMFCApplication1App 初始化
 
+LONG ExceptionCrashHandler(EXCEPTION_POINTERS *pException)
+{
+    // 创建Dump文件
+    CString strFileName;
+    DWORD dwTicket = GetTickCount();
+    strFileName.Format(L"Exception_%u.dmp", dwTicket);
+    HANDLE hDumpFile = CreateFile(strFileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    // Dump信息
+    MINIDUMP_EXCEPTION_INFORMATION dumpInfo;
+    dumpInfo.ExceptionPointers = pException;
+    dumpInfo.ThreadId = GetCurrentThreadId();
+    dumpInfo.ClientPointers = TRUE;
+    // 写入Dump文件内容
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hDumpFile, MiniDumpNormal, &dumpInfo, NULL, NULL);
+    CloseHandle(hDumpFile);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 BOOL CMFCApplication1App::InitInstance()
 {
+    //抓捕异常文件
+    ::SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)ExceptionCrashHandler);  //cash代码
+
 	// 如果一个运行在 Windows XP 上的应用程序清单指定要
 	// 使用 ComCtl32.dll 版本 6 或更高版本来启用可视化方式，
 	//则需要 InitCommonControlsEx()。  否则，将无法创建窗口。
