@@ -6,6 +6,11 @@
 
 typedef struct _DataCompleteInfo
 {
+    bool operator<(const _DataCompleteInfo &rhs) const
+    {
+        return uiFirstFileNum < rhs.uiFirstFileNum;
+    }
+
     DataInfo dataInfo;
     UINT uiFirstFileNum = 0;
     UINT uiFinalFileNum = 0;

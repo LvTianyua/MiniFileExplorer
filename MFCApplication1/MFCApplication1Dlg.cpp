@@ -1228,6 +1228,12 @@ void CMFCApplication1Dlg::OnLvnEndScrollList2(NMHDR *pNMHDR, LRESULT *pResult)
         {
             AddOneListItem(m_vecCurChildAttrInfos[uiAllItemCount + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
         }
+        int nMin = 0;
+        int nMax = 0;
+        m_listFiles.GetScrollRange(SB_VERT, &nMin, &nMax);
+        nMax += 100;
+        m_listFiles.SetScrollRange(SB_VERT, nMin, nMax);
+        m_listFiles.RedrawWindow();
     }
 
     *pResult = 0;

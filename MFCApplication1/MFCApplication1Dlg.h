@@ -20,6 +20,15 @@ typedef struct _ItemData
     UINT uiChildDirNum = 0;                    // 当前item子Dir数量
 }ItemData, *PItemData;
 
+class CMyList : public CListCtrl
+{
+public:
+    CMyList() = default;
+    ~CMyList() = default;
+
+private:
+
+};
 
 // CMFCApplication1Dlg 对话框
 class CMFCApplication1Dlg : public CDialogEx
