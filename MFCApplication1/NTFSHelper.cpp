@@ -24,8 +24,7 @@ CNTFSHelper::~CNTFSHelper()
 
 std::vector<CString> CNTFSHelper::GetAllLogicDriversNames()
 {
-    TCHAR szBuf[MAX_PATH];
-    memset(szBuf, 0, MAX_PATH);
+    TCHAR szBuf[MAX_PATH + 1] = {0};
     DWORD dwLen = GetLogicalDriveStrings(sizeof(szBuf) / sizeof(TCHAR), szBuf);
 
     std::vector<CString> vecDriversNames;
@@ -53,20 +52,6 @@ std::vector<CString> CNTFSHelper::GetAllLogicDriversNames()
             }
         }
     }
-//     if (!m_bInit)
-//     {
-//         m_bInit = TRUE;
-//         CString strCurDriverName = m_strCurDriverName;
-//         _ResetCurDriverInfo();
-//         for (const auto& info : vecDriversNames)
-//         {
-//             SetCurDriverInfo(info);
-//             BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-//             _GetFileRecordByFileRefNum2(5, buffer);
-//         }
-//         _ResetCurDriverInfo();
-//         SetCurDriverInfo(strCurDriverName);
-//     }
     return vecDriversNames;
 }
 
@@ -215,7 +200,7 @@ BOOL CNTFSHelper::_GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYT
         return TRUE;
     }
 
-    if (_GetFileBufferByFileNumFrom80DataRun(ui64FileRefNum, pBuffer, bFresh))
+    if (_GetFileBufferByFileNumFrom80DataRun(ui64FileRefNum, pBuffer))
     {
         // 判断一下文件参考号，做下校准
         UINT uiFileNum = 0;
@@ -395,7 +380,7 @@ BOOL CNTFSHelper::_Get30HAttrSPosFrom20HAttr(const PBYTE pRecordBuffer, UINT& ui
     return FALSE;
 }
 
-BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum)
+BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum)
 {
     // 1.分析文件记录头部 找到第一个属性位置（记录第一个属性偏移首地址在文件记录首地址偏移0x14位置，占用2字节）
     UINT uiA0HSPos = 0;
@@ -455,15 +440,13 @@ BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std
                 if (CNTFSHelper::GetInstance()->_GetA0HAttrDataRunLists(newRecordBuffer, vecDataRunLists))
                 {
                     // 从datarun获取所有子项
-                    CString strParentPath;
-                    _AutoGetFullPath(newRecordBuffer, strParentPath);
-                    if (strParentPath == L".")
+                    CString strPath = strParentPath;
+                    if (strPath == L".")
                     {
-                        strParentPath = m_strCurDriverName + L":";
+                        strPath = m_strCurDriverName + L":";
                     }
-                    if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
+                    if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strPath, vecDataRunLists, vecChildAttrInfos))
                     {
-                        //_SortChildInfos(vecChildAttrInfos, uiDirNum);
                         return TRUE;
                     }
                 }
@@ -476,7 +459,7 @@ BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std
     return FALSE;
 }
 
-BOOL CNTFSHelper::_Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum)
+BOOL CNTFSHelper::_Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum)
 {
     // 1.分析文件记录头部 找到第一个属性位置（记录第一个属性偏移首地址在文件记录首地址偏移0x14位置，占用2字节）
     UINT ui90HSPos = 0;
@@ -531,9 +514,8 @@ BOOL CNTFSHelper::_Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std
             BYTE newRecordBuffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
             if (_GetFileRecordByFileRefNum2(ui64FileNum, newRecordBuffer))
             {
-                if (_Get90HAttrChildAttrInfos(newRecordBuffer, vecChildAttrInfos))
+                if (_Get90HAttrChildAttrInfos(newRecordBuffer, strParentPath, vecChildAttrInfos))
                 {
-                    //_SortChildInfos(vecChildAttrInfos, uiDirNum);
                     return TRUE;
                 }
             }
@@ -707,8 +689,9 @@ BOOL CNTFSHelper::_GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer,
     fileAttrInfo.bIsDir = (ui64AttrSign & 0x10000000) == 0x10000000;
 
     // 2.文件参考号(这个字段整个8个字节，但是后两个字节时序列号，只读前六位就可以)
+    // 前23个文件记录时元文件或者系统保留的文件记录，过滤掉
     memcpy(&fileAttrInfo.ui64FileUniNum, &pDataRunBuffer[uiIndexSPos], 6);
-    if (fileAttrInfo.ui64FileUniNum == 0)
+    if (fileAttrInfo.ui64FileUniNum <= 23)
     {
         return FALSE;
     }
@@ -732,23 +715,15 @@ BOOL CNTFSHelper::_GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer,
     // 5.实际大小
     memcpy(&(fileAttrInfo.ui64FileSize), &pDataRunBuffer[uiIndexSPos + 0x40], 8);
 
+    // 6.文件名相关
     BYTE byNameLength = 0;
     memcpy(&byNameLength, &pDataRunBuffer[uiIndexSPos + 0x50], 1);
 
-    TCHAR* pName = new TCHAR[2 * byNameLength + 2];
-    ZeroMemory(pName, 2 * byNameLength + 2);
-    memcpy(pName, &pDataRunBuffer[uiIndexSPos + 0x52], 2 * byNameLength);
-    fileAttrInfo.strFilePath = CString(pName);
-    _SafeDeleteBuffer(pName);
-
     memcpy(&fileAttrInfo.byNameSpace, &pDataRunBuffer[uiIndexSPos + 0x51], 1);
 
-    // 6.递归获取全路径
-//     BYTE recordBuffer[ONE_FILE_RECORD_SIZE + 1] = {0};
-//     if (_GetFileRecordByFileRefNum2(fileAttrInfo.ui64FileUniNum, recordBuffer))
-//     {
-//         return _AutoGetFullPath(recordBuffer, fileAttrInfo.strFilePath);
-//     }
+    TCHAR tName[MAX_PATH + 1] = {0};
+    memcpy(&tName, &pDataRunBuffer[uiIndexSPos + 0x52], 2 * byNameLength);
+    fileAttrInfo.strFilePath = CString(tName);
 
     return TRUE;
 }
@@ -808,7 +783,7 @@ BOOL CNTFSHelper::_GetDriverHandleByDriverName(const CString& strDriverName, HAN
 
     //获取对应逻辑驱动器句柄
     handle = CreateFile(strDriverRealName,
-        GENERIC_READ,
+        GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
         OPEN_EXISTING,
@@ -879,15 +854,27 @@ void CNTFSHelper::_SortChildInfos(std::vector<FileAttrInfo>& vecChildInfos, UINT
     std::vector<FileAttrInfo> ::iterator newit = std::unique(vecChildInfos.begin(), vecChildInfos.end());
     vecChildInfos.erase(newit, vecChildInfos.end());
 
-    for (const auto& info : vecChildInfos)
+    for (auto& info : vecChildInfos)
     {
         if (info.bIsDir)
         {
             uiDirNum++;
         }
-        else
+        if (info.byNameSpace == 2)
         {
-            break;
+            BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+            if (_GetFileRecordByFileRefNum2(info.ui64FileUniNum, buffer))
+            {
+                CString strFileName;
+                if (_GetFileNameByFileRecord(buffer, strFileName))
+                {
+                    TCHAR tName[MAX_PATH + 1] = { 0 };
+                    memcpy(&tName, info.strFilePath, 2 * info.strFilePath.GetLength() + 2);
+                    PathRemoveFileSpec(tName);
+                    PathAppend(tName, strFileName);
+                    info.strFilePath = CString(tName);
+                }
+            }
         }
     }
 }
@@ -1026,66 +1013,21 @@ BOOL CNTFSHelper::_GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::
     return !vecDataRunInfos.empty();
 }
 
-BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer, BOOL bFresh)
+BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer)
 {
     UINT64 ui64FinishSize = 0;
-    if (!bFresh)
-    {
-        // 先看看缓存里有没有这个文件记录，没有再去遍历
-        for (const auto& info : m_mapDataInfoBuffer)
-        {
-            UINT uiFirstFileNum = 0;
-            UINT uiFinalFileNum = 0;
-            for (const auto& info1 : m_vecMFTDataCompRunList)
-            {
-                if (info1.dataInfo == info.first)
-                {
-                    uiFirstFileNum = info1.uiFirstFileNum;
-                    uiFinalFileNum = info1.uiFinalFileNum;
-                    break;
-                }
-            }
-
-            PBYTE pTmpBuffer = info.second;
-            if (uiFinalFileNum >= ui64FileNum && uiFirstFileNum <= ui64FileNum)
-            {
-                for (UINT ui = ui64FileNum * ONE_FILE_RECORD_SIZE - ui64FinishSize; ui < info.first.ui64UsedSclusters * ONE_CLUSTER_SIZE; ui += ONE_FILE_RECORD_SIZE)
-                {
-                    UINT uiFileNum = 0;
-                    memcpy(&uiFileNum, &pTmpBuffer[ui + 0x2C], 4);
-                    // 有可能中间有无效区间
-                    if (uiFileNum < ui64FileNum)
-                    {
-                        ui += (ui64FileNum - uiFileNum - 1) * ONE_FILE_RECORD_SIZE;
-                        continue;
-                    }
-                    if (uiFileNum == ui64FileNum)
-                    {
-                        memcpy(pFileRecordBuffer, &pTmpBuffer[ui], ONE_FILE_RECORD_SIZE);
-                        return TRUE;
-                    }
-                }
-            }
-            ui64FinishSize += info.first.ui64UsedSclusters * ONE_CLUSTER_SIZE;
-        }
-    }
-
     ui64FinishSize = 0;
     for (const auto& info : m_vecMFTDataCompRunList)
     {
         if (info.uiFirstFileNum <= ui64FileNum && ui64FileNum <= info.uiFinalFileNum)
         {
-            PBYTE pDataRunBuffer = new BYTE[info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1];
-            ZeroMemory(pDataRunBuffer, info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE + 1);
-            if (_GetAnySectionBuffer(info.dataInfo.ui64BeginScluster * ONE_CLUSTER_SIZE, info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE, pDataRunBuffer))
+            for (UINT ui = ui64FileNum * ONE_FILE_RECORD_SIZE - ui64FinishSize; ui < info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE; ui += ONE_FILE_RECORD_SIZE)
             {
-                UINT uiFileNum111 = 0;
-                memcpy(&uiFileNum111, &pDataRunBuffer[0x2C], 4);
-
-                for (UINT ui = ui64FileNum * ONE_FILE_RECORD_SIZE - ui64FinishSize; ui < info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE; ui += ONE_FILE_RECORD_SIZE)
+                BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+                if (_GetAnySectionBuffer(ui + info.dataInfo.ui64BeginScluster * ONE_CLUSTER_SIZE, ONE_FILE_RECORD_SIZE, buffer))
                 {
                     UINT uiFileNum = 0;
-                    memcpy(&uiFileNum, &pDataRunBuffer[ui + 0x2C], 4);
+                    memcpy(&uiFileNum, &buffer[0x2C], 4);
                     // 有可能中间有无效区间
                     if (uiFileNum < ui64FileNum)
                     {
@@ -1094,26 +1036,10 @@ BOOL CNTFSHelper::_GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum,
                     }
                     if (uiFileNum == ui64FileNum)
                     {
-                        memcpy(pFileRecordBuffer, &pDataRunBuffer[ui], ONE_FILE_RECORD_SIZE);
-                        if (m_mapDataInfoBuffer.find(info.dataInfo) != m_mapDataInfoBuffer.end())
-                        {
-                            _SafeDeleteBuffer(m_mapDataInfoBuffer[info.dataInfo]);
-                            m_mapDataInfoBuffer[info.dataInfo] = pDataRunBuffer;
-                        }
-                        else
-                        {
-                            m_mapDataInfoBuffer.insert(std::make_pair(info.dataInfo, pDataRunBuffer));
-                        }
+                        memcpy(pFileRecordBuffer, &buffer, ONE_FILE_RECORD_SIZE);
                         return TRUE;
                     }
                 }
-                _SafeDeleteBuffer(pDataRunBuffer);
-                return FALSE;
-            }
-            else
-            {
-                _SafeDeleteBuffer(pDataRunBuffer);
-                return FALSE;
             }
         }
         ui64FinishSize += (info.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE);
@@ -1127,14 +1053,12 @@ BOOL CNTFSHelper::_InitCurDriver()
     if (m_mapDriverCompInfos.find(m_strCurDriverName) != m_mapDriverCompInfos.end())
     {
         m_vecMFTDataCompRunList = m_mapDriverCompInfos[m_strCurDriverName];
-        m_mapDataInfoBuffer = m_mapDriverDataBuffers[m_strCurDriverName];
         m_mapFileNumRecordBuffer = m_mapDriverFileNumBuffers[m_strCurDriverName];
         return TRUE;
     }
     else
     {
         m_vecMFTDataCompRunList.clear();
-        m_mapDataInfoBuffer.clear();
         m_mapFileNumRecordBuffer.clear();
     }
 
@@ -1266,7 +1190,6 @@ BOOL CNTFSHelper::_InitCurDriver()
 
 void CNTFSHelper::_ClearDataMapBuffer(const CString& strLastDriverName)
 {
-    m_mapDriverDataBuffers[strLastDriverName] = m_mapDataInfoBuffer;
     m_mapDriverFileNumBuffers[strLastDriverName] = m_mapFileNumRecordBuffer;
 }
 
@@ -1315,16 +1238,16 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
         {
             m_mapDriverCompInfos.erase(m_mapDriverCompInfos.find(m_strCurDriverName));
         }
-        for (const auto& info : m_mapDataInfoBuffer)
-        {
-            _SafeDeleteBuffer(info.second);
-        }
-        m_mapDataInfoBuffer.clear();
         for (const auto& info : m_mapFileNumRecordBuffer)
         {
             _SafeDeleteBuffer(info.second);
         }
         m_mapFileNumRecordBuffer.clear();
+        BOOL bSuccess = FlushFileBuffers(m_hanCurDriver);
+        if (!bSuccess)
+        {
+            AfxMessageBox(L"刷新磁盘失败，可能权限不足，请稍后重新进入刷新文件列表");
+        }
         _InitCurDriver();
     }
 
@@ -1332,6 +1255,8 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = {0};
     if (_GetFileRecordByFileRefNum2(ui64ParentRefNum, buffer, bForceFresh))
     {
+        CString strParentPath;
+        _AutoGetFullPath(buffer, strParentPath);
         UINT uiAttrSPos = 0;
         UINT uiAttrLength = 0;
         BOOL bHave20HAttr = FALSE;
@@ -1341,9 +1266,9 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
         if (_FindAnyAttrSPosByFileRecord(buffer, 0x20, uiAttrSPos, uiAttrLength))
         {
             bHave20HAttr = TRUE;
-            if (!_GetA0HAttrChildListFrom20HAttr(buffer, vecChildInfosIn20Attr, uiDirNumIn20HAttr))
+            if (!_GetA0HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr))
             {
-                _Get90HAttrChildListFrom20HAttr(buffer, vecChildInfosIn20Attr, uiDirNumIn20HAttr);
+                _Get90HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr);
             }
         }
 
@@ -1357,12 +1282,10 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
             if (CNTFSHelper::GetInstance()->_GetA0HAttrDataRunLists(buffer, vecDataRunLists))
             {
                 // 从datarun获取所有子项
-                CString strParentPath;
-                _AutoGetFullPath(buffer, strParentPath);
                 if (strParentPath == L".")
                 {
                     strParentPath = m_strCurDriverName + L":";
-                }
+                } 
                 if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
                 {
                     if (bHave20HAttr)
@@ -1381,7 +1304,7 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
             UINT uiAttrLength = 0;
             if (_FindAnyAttrSPosByFileRecord(buffer, 0x90, uiAttrSPos, uiAttrLength))
             {
-                if (_Get90HAttrChildAttrInfos(buffer, vecChildAttrInfos))
+                if (_Get90HAttrChildAttrInfos(buffer, strParentPath, vecChildAttrInfos))
                 {
                     if (bHave20HAttr)
                     {
@@ -1461,7 +1384,7 @@ BOOL CNTFSHelper::_GetA0HAttrDataRunLists(const PBYTE pRecordBuffer, std::vector
     return FALSE;
 }
 
-BOOL CNTFSHelper::_Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecFileAttrLists)
+BOOL CNTFSHelper::_Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecFileAttrLists)
 {
     // 1.获取A0属性起始位置-datarun起始位置=datarun长度 ，遍历不能超过这个长度
     UINT ui90AttrSPos = 0;
@@ -1481,6 +1404,7 @@ BOOL CNTFSHelper::_Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vect
             FileAttrInfo attrInfo;
             if (_GetOneFileAttrInfoByDataRunBuffer(pRecordBuffer, uiFirstIndexSPos, attrInfo))
             {
+                attrInfo.strFilePath = strParentPath + L"\\" + attrInfo.strFilePath;
                 vecFileAttrLists.push_back(attrInfo);
             }
 
@@ -1504,6 +1428,35 @@ BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const CString& strParentPath, c
             return FALSE;
         }
 
+        // 做fix
+        for (UINT ui = 0; ui < datainfo.ui64UsedSclusters * ONE_CLUSTER_SIZE; ui += ONE_CLUSTER_SIZE)
+        {
+            unsigned short usTmp1 = 0;
+            unsigned short usTmp2 = 0;
+            unsigned short usTmp3 = 0;
+            unsigned short usTmp4 = 0;
+            unsigned short usTmp5 = 0;
+            unsigned short usTmp6 = 0;
+            unsigned short usTmp7 = 0;
+            unsigned short usTmp8 = 0;
+            memcpy(&usTmp1, &pBuffer[ui + 0x2A], 2);
+            memcpy(&usTmp2, &pBuffer[ui + 0x2C], 2);
+            memcpy(&usTmp3, &pBuffer[ui + 0x2E], 2);
+            memcpy(&usTmp4, &pBuffer[ui + 0x30], 2);
+            memcpy(&usTmp5, &pBuffer[ui + 0x32], 2);
+            memcpy(&usTmp6, &pBuffer[ui + 0x34], 2);
+            memcpy(&usTmp7, &pBuffer[ui + 0x36], 2);
+            memcpy(&usTmp8, &pBuffer[ui + 0x38], 2);
+            memcpy(&pBuffer[ui + 510], &usTmp1, 2);
+            memcpy(&pBuffer[ui + 1022], &usTmp2, 2);
+            memcpy(&pBuffer[ui + 1534], &usTmp3, 2);
+            memcpy(&pBuffer[ui + 2046], &usTmp4, 2);
+            memcpy(&pBuffer[ui + 2558], &usTmp5, 2);
+            memcpy(&pBuffer[ui + 3070], &usTmp6, 2);
+            memcpy(&pBuffer[ui + 3582], &usTmp7, 2);
+            memcpy(&pBuffer[ui + 4094], &usTmp8, 2);
+        }
+
         for (int i = 0; i < datainfo.ui64UsedSclusters; ++i)
         {
             // 先解析索引头，拿到第一个索引项的偏移和索引总大小（超出总大小的视为无效索引）
@@ -1525,9 +1478,7 @@ BOOL CNTFSHelper::_GetChildFileAttrInfoByRunList(const CString& strParentPath, c
                 FileAttrInfo attrInfo;
                 if (_GetOneFileAttrInfoByDataRunBuffer(pBuffer, uiIndexSPos, attrInfo))
                 {
-                    CString strPath = strParentPath;
-                    PathAppend((LPWSTR)strPath.GetBuffer(0), attrInfo.strFilePath);
-                    attrInfo.strFilePath = strPath;
+                    attrInfo.strFilePath = strParentPath + L"\\" + attrInfo.strFilePath;
                     vecChildAttrInfos.push_back(attrInfo);
                 }
 
@@ -1759,16 +1710,10 @@ BOOL CNTFSHelper::_GetFileNameBy30HAttr(const PBYTE pRecordBuffer, const UINT& u
     memcpy(&fileNameSize, &pRecordBuffer[uiAttrBodySPos + 0x40], 1);
 
     // 2.文件名
-    TCHAR* pNameBuffer = new TCHAR[fileNameSize * 2 + 2];
-    ZeroMemory(pNameBuffer, fileNameSize * 2 + 2);
-    memcpy(pNameBuffer, &pRecordBuffer[uiAttrBodySPos + 0x42], fileNameSize * 2);
+    TCHAR tName[MAX_PATH + 1] = { 0 };
+    memcpy(&tName, &pRecordBuffer[uiAttrBodySPos + 0x42], fileNameSize * 2);
 
-    strFileName = CString(pNameBuffer);
-    if (pNameBuffer)
-    {
-        delete[] pNameBuffer;
-        pNameBuffer = nullptr;
-    }
+    strFileName = CString(tName);
     return !strFileName.IsEmpty();
 }
 
@@ -1814,7 +1759,7 @@ BOOL CNTFSHelper::_AutoGetFullPath(const PBYTE pRecordBuffer, CString& strPath)
             strPath = strCurFileName;
             return TRUE;
         }
-        TCHAR buffer1[MAX_PATH * 2 + 2] = { 0 };
+        TCHAR buffer1[MAX_PATH + 1] = { 0 };
         memcpy(&buffer1, strCurFileName, strCurFileName.GetLength() * 2);
         if (!PathAppend(buffer1, strPath))
         {
@@ -1831,7 +1776,7 @@ BOOL CNTFSHelper::_AutoGetFullPath(const PBYTE pRecordBuffer, CString& strPath)
             {
                 CString strFilePath = m_strCurDriverName;
                 strFilePath += L":";
-                TCHAR buffer[MAX_PATH * 2 + 2] = {0};
+                TCHAR buffer[MAX_PATH + 1] = {0};
                 memcpy(&buffer, strFilePath, strFilePath.GetLength() * 2);
                 if (!PathAppend(buffer, strPath))
                 {

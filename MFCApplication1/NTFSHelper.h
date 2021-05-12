@@ -54,10 +54,10 @@ protected:
     BOOL _Get30HAttrSPosFrom20HAttr(const PBYTE pRecordBuffer, UINT& ui30HSpos, PBYTE pNewRecordBuffer);
 
     // 根据20属性读取其中的A0对应的子项集合
-    BOOL _GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
+    BOOL _GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
 
     // 根据20属性读取其中的90对应的子项集合
-    BOOL _Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
+    BOOL _Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
 
     // 根据30H属性获取文件名
     BOOL _GetFileNameBy30HAttr(const PBYTE pRecordBuffer, const UINT& ui30HSPos, CString& strFileName);
@@ -125,7 +125,7 @@ protected:
     BOOL _GetA0HAttrDataRunLists(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunLists);
 
     // 获取90属性指向的datarun列表
-    BOOL _Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecFileAttrLists);
+    BOOL _Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecFileAttrLists);
 
     // 根据datarun列表获取索引项相关的信息
     BOOL _GetChildFileAttrInfoByRunList(const CString& strParentPath, const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos);
@@ -144,7 +144,7 @@ protected:
     BOOL _GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunInfos);
 
     // 从MFTdatarun中读取指定文件号的文件记录
-    BOOL _GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer, BOOL bFresh = FALSE);
+    BOOL _GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer);
 
     // 初始化磁盘
     BOOL _InitCurDriver();
@@ -176,11 +176,9 @@ private:
     HANDLE                                          m_hanCurDriver = NULL;             // 当前盘符句柄
     HWND                                            m_hProgressWnd = NULL;             // 进度条窗口句柄
     HANDLE                                          m_hFile = NULL;                    // 拷贝文件的句柄
-    std::map<DataInfo, PBYTE>                       m_mapDataInfoBuffer;               // 某一个datainfo对应的buffer
     std::map<UINT64, PBYTE>                         m_mapFileNumRecordBuffer;          // 文件参考号对应文件记录集合
     std::vector<DataCompleteInfo>                   m_vecMFTDataCompRunList;           // MFT的datarunlist
     std::map<CString, std::vector<DataCompleteInfo>> m_mapDriverCompInfos;             // 磁盘，datarunlist映射
-    std::map<CString, std::map<DataInfo, PBYTE>>    m_mapDriverDataBuffers;            // 磁盘，databuffer映射
     std::map<CString, std::map<UINT64, PBYTE>> m_mapDriverFileNumBuffers;              // 磁盘，FileNumBuffer映射
     std::vector<CString>                            m_vecFilterNames;
     BOOL                                            m_bInit = FALSE;
