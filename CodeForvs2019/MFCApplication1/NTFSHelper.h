@@ -2,6 +2,20 @@
 #include <vector>
 #include "SingleInstace.h"
 #include "INTFSHelper.h"
+#include <map>
+
+typedef struct _DataCompleteInfo
+{
+    bool operator<(const _DataCompleteInfo &rhs) const
+    {
+        return uiFirstFileNum < rhs.uiFirstFileNum;
+    }
+
+    DataInfo dataInfo;
+    UINT uiFirstFileNum = 0;
+    UINT uiFinalFileNum = 0;
+} DataCompleteInfo, *PDataCompleteInfo;
+
 
 class CNTFSHelper : public CSingleInstace<CNTFSHelper>, public INTFSHelper
 {
@@ -20,7 +34,7 @@ public:
     virtual BOOL MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64SrcFileSize, const CString& strDestPath) override;
 
     // Ntfs根据当前目录参考号，获取全部需要显示的子项集合
-    virtual BOOL GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum) override;
+    virtual BOOL GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum, BOOL bForceFresh = FALSE) override;
 
     // 根据子文件参考号获取父文件参考号
     virtual BOOL GetParentFileNumByFileNum(const UINT64& ui64FileNum, UINT64& ui64ParentFileNum) override;
@@ -36,7 +50,7 @@ protected:
     BOOL _GetFileRecordByFileRefNum(const UINT64& ui64FileRefNum, PBYTE pBuffer);
 
     // 根据文件参考号获取文件记录（遍历磁盘全部扇区解析属性方式寻找，文件参考号就是MFT中第N项）
-    BOOL _GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer);
+    BOOL _GetFileRecordByFileRefNum2(const UINT64& ui64FileRefNum, PBYTE pBuffer, BOOL bFresh = FALSE);
 
     // 根据文件记录获取30H首地址，返回False可能是存在20属性
     BOOL _Get30HAttrSPosByFileRecord(const PBYTE pRecordBuffer, UINT& ui30HSpos);
@@ -45,10 +59,10 @@ protected:
     BOOL _Get30HAttrSPosFrom20HAttr(const PBYTE pRecordBuffer, UINT& ui30HSpos, PBYTE pNewRecordBuffer);
 
     // 根据20属性读取其中的A0对应的子项集合
-    BOOL _GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
+    BOOL _GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
 
     // 根据20属性读取其中的90对应的子项集合
-    BOOL _Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
+    BOOL _Get90HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum);
 
     // 根据30H属性获取文件名
     BOOL _GetFileNameBy30HAttr(const PBYTE pRecordBuffer, const UINT& ui30HSPos, CString& strFileName);
@@ -116,10 +130,10 @@ protected:
     BOOL _GetA0HAttrDataRunLists(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunLists);
 
     // 获取90属性指向的datarun列表
-    BOOL _Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, std::vector<FileAttrInfo>& vecFileAttrLists);
+    BOOL _Get90HAttrChildAttrInfos(const PBYTE pRecordBuffer, const CString& strParentPath, std::vector<FileAttrInfo>& vecFileAttrLists);
 
     // 根据datarun列表获取索引项相关的信息
-    BOOL _GetChildFileAttrInfoByRunList(const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos);
+    BOOL _GetChildFileAttrInfoByRunList(const CString& strParentPath, const std::vector<DataInfo>& vecDataRunLists, std::vector<FileAttrInfo>& vecChildAttrInfos);
 
     // 针对文件解析80属性，根据文件记录获取文件真实数据
     // 返回值：0，失败 1，成功 FileDataBuffer就是文件数据 2，文件数据大于4m，存在是超大文件的可能性，只给出datarun信息，自己循环边读边写
@@ -134,13 +148,44 @@ protected:
     // 从文件记录里面读取20属性中的80属性对应的文件记录中的daturun列表
     BOOL _GetDataRunBy80AttrFrom20Attr(const PBYTE pRecordBuffer, std::vector<DataInfo>& vecDataRunInfos);
 
-    // 从80datarun中读取指定文件号的文件记录
-    BOOL _GetFileBufferByFileNumFrom80DataRun(const std::vector<DataInfo>& vecDataRun, const UINT64 ui64FileNum, PBYTE pFileRecordBuffer);
+    // 从MFTdatarun中读取指定文件号的文件记录
+    BOOL _GetFileBufferByFileNumFrom80DataRun(const UINT64 ui64FileNum, PBYTE pFileRecordBuffer);
+
+    // 初始化磁盘
+    BOOL _InitCurDriver();
+
+    void _ClearDataMapBuffer(const CString& strLastDriverName);
+
+    template<typename T>
+    void _SafeDelete(T* ptr) 
+    {
+        if (ptr)
+        {
+            delete ptr;
+            ptr = nullptr;
+        }
+    }
+
+    template<typename T>
+    void _SafeDeleteBuffer(T* ptr)
+    {
+        if (ptr)
+        {
+            delete[] ptr;
+            ptr = nullptr;
+        }
+    }
 
 private:
     CString                                         m_strCurDriverName;                // 当前打开的盘符
     HANDLE                                          m_hanCurDriver = NULL;             // 当前盘符句柄
     HWND                                            m_hProgressWnd = NULL;             // 进度条窗口句柄
     HANDLE                                          m_hFile = NULL;                    // 拷贝文件的句柄
+    std::map<UINT64, PBYTE>                         m_mapFileNumRecordBuffer;          // 文件参考号对应文件记录集合
+    std::vector<DataCompleteInfo>                   m_vecMFTDataCompRunList;           // MFT的datarunlist
+    std::map<CString, std::vector<DataCompleteInfo>> m_mapDriverCompInfos;             // 磁盘，datarunlist映射
+    std::map<CString, std::map<UINT64, PBYTE>> m_mapDriverFileNumBuffers;              // 磁盘，FileNumBuffer映射
+    std::vector<CString>                            m_vecFilterNames;
+    BOOL                                            m_bInit = FALSE;
 };
 

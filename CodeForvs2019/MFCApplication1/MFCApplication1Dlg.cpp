@@ -21,6 +21,37 @@
 #define ONE_TIME_INSERT_TREE_SIZE 10000
 #define MSG_ASYNC_ADD_TREE_ITEM     WM_USER + 20001 
 
+BEGIN_MESSAGE_MAP(CMyList, CListCtrl)
+	ON_WM_VSCROLL()
+END_MESSAGE_MAP()
+
+void CMyList::OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
+{
+//     LPSCROLLINFO pInfo = new SCROLLINFO;
+//     GetScrollInfo(SB_VERT, pInfo);
+// 	CWnd* pWnd = GetParent();
+//     if (pWnd && pWnd->GetSafeHwnd())
+//     {
+//         CMFCApplication1Dlg* pParentWnd = dynamic_cast<CMFCApplication1Dlg*> (pWnd);
+//         if (pParentWnd && pParentWnd->GetSafeHwnd())
+//         {
+// 			UINT uiCurVisibleMaxItem = GetTopIndex() + (GetCountPerPage() + 1);
+// 			UINT uiAllItemCount = GetItemCount();
+// 			if (uiCurVisibleMaxItem == uiAllItemCount && uiAllItemCount < pParentWnd->m_vecCurChildAttrInfos.size())
+// 			{
+// 				UINT uiNeedInsertNum = min((pParentWnd->m_vecCurChildAttrInfos.size() - uiAllItemCount), ONE_TIME_INSERT_LIST_SIZE);
+// 				for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
+// 				{
+//                     pParentWnd->AddOneListItem(pParentWnd->m_vecCurChildAttrInfos[uiAllItemCount + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
+// 				}
+//                 EnsureVisible(GetItemCount() - 1, TRUE);
+//                 PostMessage(WM_LBUTTONUP, 0, 0);
+// 			}
+//         }
+//     }
+    return CListCtrl::OnVScroll(nSBCode, nPos, pScrollBar);
+}
+
 
 CMFCApplication1Dlg::CMFCApplication1Dlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_MFCAPPLICATION1_DIALOG, pParent)
@@ -85,7 +116,7 @@ BOOL CMFCApplication1Dlg::OnInitDialog()
     InitTreeImageList();
     m_hTreeRootItem = AddOneTreeItem(TVI_ROOT, L"我的电脑", 0, L"");
     AddSubTreeItem(m_hTreeRootItem);
-    m_treeMain.Expand(m_hTreeRootItem, TVM_EXPAND);
+    m_treeMain.Expand(m_hTreeRootItem, TVE_EXPAND);
 
     InitListFiles();
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
@@ -203,18 +234,27 @@ void CMFCApplication1Dlg::ExpandAnyTreeItem(const HTREEITEM& hTreeItem)
 {
     // 1.清空当前item全部子项，重新添加一遍
     HTREEITEM hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
-    while (hChildTreeItem)
+    if (m_mapTreeItemDatas.find(hChildTreeItem) != m_mapTreeItemDatas.end())
     {
-        m_treeMain.DeleteItem(hChildTreeItem);
-        hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
-    }
-    AddSubTreeItem(hTreeItem);
-
-    hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
-    while (hChildTreeItem)
-    {
-        AddOneTreeItem(hChildTreeItem, L"", -1, L"");
-        hChildTreeItem = m_treeMain.GetNextItem(hChildTreeItem, TVGN_NEXT);
+        if (m_mapTreeItemDatas[hChildTreeItem].ui64FileNum == -1)
+        {
+            m_treeMain.DeleteItem(hChildTreeItem);
+            AddSubTreeItem(hTreeItem);
+            hChildTreeItem = m_treeMain.GetChildItem(hTreeItem);
+            while (hChildTreeItem)
+            {
+                AddOneTreeItem(hChildTreeItem, L"", -1, L"");
+                hChildTreeItem = m_treeMain.GetNextItem(hChildTreeItem, TVGN_NEXT);
+            }
+        }
+        else if (m_mapTreeItemDatas[hChildTreeItem].ui64FileNum == 5)
+        {
+            while (hChildTreeItem)
+            {
+                AddOneTreeItem(hChildTreeItem, L"", -1, L"");
+                hChildTreeItem = m_treeMain.GetNextItem(hChildTreeItem, TVGN_NEXT);
+            }
+        }
     }
 }
 
@@ -225,7 +265,9 @@ void CMFCApplication1Dlg::AddSubTreeItem(const HTREEITEM& hParentItem)
     {
         if (CNTFSHelper::GetInstance())
         {
-            std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+            // 初始化之前，弹个提示
+            std::vector<CString> vecDriverNames;
+            vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
             for (const auto& driverName : vecDriverNames)
             {
                 AddOneTreeItem(hParentItem, driverName + L"", 5, driverName);
@@ -760,6 +802,13 @@ void CMFCApplication1Dlg::OnBnClickedButton2()
 void CMFCApplication1Dlg::OnNMClickTree1(NMHDR *pNMHDR, LRESULT *pResult)
 {
     // TODO: 在此添加控件通知处理程序代码
+	CPoint pt;
+	GetCursorPos(&pt);
+	m_treeMain.ScreenToClient(&pt);
+	UINT uFlags;
+	HTREEITEM hItem = m_treeMain.HitTest(pt, &uFlags);
+    m_treeMain.SelectItem(hItem);
+
     TreeSyncToList();
     *pResult = 0;
 }
@@ -871,7 +920,6 @@ void CMFCApplication1Dlg::OnOpen()
     }
 }
 
-
 void CMFCApplication1Dlg::OnDelete()
 {
     // TODO: 在此添加命令处理程序代码
@@ -881,38 +929,18 @@ void CMFCApplication1Dlg::OnDelete()
         if (m_mapListItemDatas.find(nItem) != m_mapListItemDatas.end())
         {
             DeleteFile(m_mapListItemDatas[nItem].strFilePath);
-            CString strParentPath;
-            if (CNTFSHelper::GetInstance()->GetFilePathByFileNum(m_ui64CurFileNum, strParentPath))
+            BeginWaitCursor();
+            m_uiCurChildDirNum = 0;
+            m_vecCurChildAttrInfos.clear();
+            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum, TRUE))
             {
-                while (true)
-                {
-                    m_uiCurChildDirNum = 0;
-                    m_vecCurChildAttrInfos.clear();
-                    if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
-                    {
-                        BOOL bQuit = FALSE;
-                        for (const auto& info : m_vecCurChildAttrInfos)
-                        {
-                            UINT64 ui64ParentFileNum = 0;
-                            if (CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(info.ui64FileUniNum, ui64ParentFileNum) && ui64ParentFileNum != m_ui64CurFileNum)
-                            {
-                                bQuit = TRUE;
-                                break;
-                            }
-                        }
-                        if (!bQuit)
-                        {
-                            ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
-                            break;
-                        }
-                    }
-                    Sleep(100);
-                }
+                ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
             }
+            EndWaitCursor();
+            AfxMessageBox(L"文件删除完成！");
         }
     }
 }
-
 
 void CMFCApplication1Dlg::OnCopy()
 {
@@ -1028,31 +1056,15 @@ void CMFCApplication1Dlg::OnTie()
         {
             DeleteFile(m_strSrcFilePath);
         }
-        // 这里可能有个文件记录更新延时的问题，就是文件已经创建成功了，但是文件记录还没更新，获取到的不对，
-        // 这里要一直刷新，直到文件记录获取成功为止
-        while (true)
+        m_uiCurChildDirNum = 0;
+        m_vecCurChildAttrInfos.clear();
+        BeginWaitCursor();
+        if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum, TRUE))
         {
-            m_uiCurChildDirNum = 0;
-            m_vecCurChildAttrInfos.clear();
-            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
-            {
-                BOOL bFinish = FALSE;
-                for (const auto& info : m_vecCurChildAttrInfos)
-                {
-                    if (info.strFilePath.Compare(szPath) == 0)
-                    {
-                        bFinish = TRUE;
-                        break;
-                    }
-                }
-                if (bFinish)
-                {
-                    break;
-                }
-            }
-            Sleep(100);
+            ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
         }
-        ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+        EndWaitCursor();
+        AfxMessageBox(L"文件数据拷贝完成!");
     }
     else
     {
@@ -1182,31 +1194,15 @@ void CMFCApplication1Dlg::OnTie2()
         {
             DeleteFile(m_strSrcFilePath);
         }
-        // 这里可能有个文件记录更新延时的问题，就是文件已经创建成功了，但是文件记录还没更新，获取到的不对，
-        // 这里要一直刷新，直到文件记录获取成功为止
-        while (true)
+        m_uiCurChildDirNum = 0;
+        m_vecCurChildAttrInfos.clear();
+        BeginWaitCursor();
+        if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum, TRUE))
         {
-            m_uiCurChildDirNum = 0;
-            m_vecCurChildAttrInfos.clear();
-            if (CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(m_ui64CurFileNum, m_vecCurChildAttrInfos, m_uiCurChildDirNum))
-            {
-                BOOL bFinish = FALSE;
-                for (const auto& info : m_vecCurChildAttrInfos)
-                {
-                    if (info.strFilePath.Compare(szPath) == 0)
-                    {
-                        bFinish = TRUE;
-                        break;
-                    }
-                }
-                if (bFinish)
-                {
-                    break;
-                }
-            }
-            Sleep(100);
+            ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
         }
-        ShowChildList(m_ui64CurFileNum, CNTFSHelper::GetInstance()->GetCurDriverName());
+        EndWaitCursor();
+        AfxMessageBox(L"文件数据拷贝完成!");
     }
     else
     {
@@ -1252,20 +1248,36 @@ void CMFCApplication1Dlg::OnLvnEndScrollList2(NMHDR *pNMHDR, LRESULT *pResult)
     // 符号 _WIN32_IE 必须是 >= 0x0560。
     LPNMLVSCROLL pStateChanged = reinterpret_cast<LPNMLVSCROLL>(pNMHDR);
     // TODO: 在此添加控件通知处理程序代码
-    UINT uiCurVisibleMaxItem = m_listFiles.GetTopIndex() + (m_listFiles.GetCountPerPage() + 1);
-    UINT uiAllItemCount = m_listFiles.GetItemCount();
-    if (uiCurVisibleMaxItem == uiAllItemCount && uiAllItemCount < m_vecCurChildAttrInfos.size())
+//     UINT uiCurVisibleMaxItem = m_listFiles.GetTopIndex() + (m_listFiles.GetCountPerPage() + 1);
+//     UINT uiAllItemCount = m_listFiles.GetItemCount();
+//     if (uiCurVisibleMaxItem + 1 == uiAllItemCount && uiAllItemCount < m_vecCurChildAttrInfos.size())
+//     {
+//         UINT uiNeedInsertNum = min((m_vecCurChildAttrInfos.size() - uiAllItemCount), ONE_TIME_INSERT_LIST_SIZE);
+//         for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
+//         {
+//             AddOneListItem(m_vecCurChildAttrInfos[uiAllItemCount + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
+//         }
+//     }
+
+    CPoint pt;
+    m_listFiles.GetItemPosition(m_listFiles.GetItemCount() - 2, &pt);
+    CRect rc;
+    m_listFiles.GetClientRect(&rc);
+    if (rc.PtInRect(pt) && m_listFiles.GetItemCount() < m_vecCurChildAttrInfos.size())
     {
-        UINT uiNeedInsertNum = min((m_vecCurChildAttrInfos.size() - uiAllItemCount), ONE_TIME_INSERT_LIST_SIZE);
-        for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
-        {
-            AddOneListItem(m_vecCurChildAttrInfos[uiAllItemCount + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
-        }
+		 UINT uiNeedInsertNum = min((m_vecCurChildAttrInfos.size() - m_listFiles.GetItemCount()), ONE_TIME_INSERT_LIST_SIZE);
+         for (UINT ui = 0; ui < uiNeedInsertNum; ++ui)
+         {
+             if (m_listFiles.GetItemCount() + ui < m_vecCurChildAttrInfos.size())
+             {
+				 AddOneListItem(m_vecCurChildAttrInfos[m_listFiles.GetItemCount() + ui], CNTFSHelper::GetInstance()->GetCurDriverName());
+             }
+         }
+
     }
 
     *pResult = 0;
 }
-
 
 void CMFCApplication1Dlg::OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResult)
 {

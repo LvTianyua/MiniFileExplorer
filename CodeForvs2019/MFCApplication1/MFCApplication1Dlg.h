@@ -20,10 +20,25 @@ typedef struct _ItemData
     UINT uiChildDirNum = 0;                    // 当前item子Dir数量
 }ItemData, *PItemData;
 
+class CMyList : public CListCtrl
+{
+public:
+    CMyList() = default;
+    ~CMyList() = default;
+
+	DECLARE_MESSAGE_MAP()
+
+public:
+	afx_msg void OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+
+private:
+
+};
 
 // CMFCApplication1Dlg 对话框
 class CMFCApplication1Dlg : public CDialogEx
 {
+    friend class CMyList;
 // 构造
 public:
 	CMFCApplication1Dlg(CWnd* pParent = NULL);	// 标准构造函数
@@ -109,7 +124,7 @@ private:
     // 左侧导航树
     CTreeCtrl m_treeMain;
     // 右侧文件列表
-    CListCtrl m_listFiles;
+    CMyList m_listFiles;
     // 当前路径显示
     CStatic m_staPath;
     // list总item数

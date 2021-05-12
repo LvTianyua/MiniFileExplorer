@@ -85,6 +85,7 @@ typedef struct _FileAttrInfo
     SYSTEMTIME stFileModifyTime;  // 文件修改时间
     UINT64 ui64FileSize = 0;        // 实际大小
     UINT64 ui64FileUniNum = 0;      // 文件参考号
+    BYTE byNameSpace = 0;           // 文件名空间
 
     _FileAttrInfo()
     {
@@ -139,10 +140,11 @@ public:
     * @param ui64ParentRefNum（IN） 父目录参考号
     * @param vecChildAttrInfos（OUT） 子项文件属性集合
     * @param uiDirNum（OUT） 子项中目录的数量
+    * @param bForceFresh（IN） 是否强制刷新
     *
     * @return 成功 TRUE 失败 FALSE
     */
-    virtual BOOL GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum) = 0;
+    virtual BOOL GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum, BOOL bForceFresh) = 0;
 
     /**
     *
