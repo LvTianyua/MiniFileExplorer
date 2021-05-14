@@ -1202,17 +1202,15 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
         _AutoGetFullPath(buffer, strParentPath);
         UINT uiAttrSPos = 0;
         UINT uiAttrLength = 0;
-        BOOL bHave20HAttr = FALSE;
         UINT uiDirNumIn20HAttr = 0;
         std::vector<FileAttrInfo> vecChildInfosIn20Attr;
         // 先看有没有20属性，有的话，先去20属性里面把对应的A0和90的子项集合拿出来
         if (_FindAnyAttrSPosByFileRecord(buffer, 0x20, uiAttrSPos, uiAttrLength))
         {
-            bHave20HAttr = TRUE;
-            if (!_GetA0HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr))
-            {
-                _Get90HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr);
-            }
+			std::vector<FileAttrInfo> vecChildInfoIn90;
+            _GetA0HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr);
+		    _Get90HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfoIn90, uiDirNumIn20HAttr);
+            vecChildInfosIn20Attr.insert(vecChildInfosIn20Attr.end(), vecChildInfoIn90.begin(), vecChildInfoIn90.end());
         }
 
         uiAttrSPos = 0;
@@ -1229,41 +1227,27 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
                 {
                     strParentPath = m_strCurDriverName + L":";
                 } 
-                if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
+                if (!CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
                 {
-                    if (bHave20HAttr)
-                    {
-                        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-                    }
-                    _SortChildInfos(vecChildAttrInfos, uiDirNum);
-                    return TRUE;
+                    return FALSE;
                 }
             }
         }
-        else
+        // 90索引项就在属性体里面，直接拿就行
+        uiAttrSPos = 0;
+        uiAttrLength = 0;
+        std::vector<FileAttrInfo> vecChildInfos90Attr;
+        if (_FindAnyAttrSPosByFileRecord(buffer, 0x90, uiAttrSPos, uiAttrLength))
         {
-            // 90索引项就在属性体里面，直接拿就行
-            uiAttrSPos = 0;
-            UINT uiAttrLength = 0;
-            if (_FindAnyAttrSPosByFileRecord(buffer, 0x90, uiAttrSPos, uiAttrLength))
+            if (!_Get90HAttrChildAttrInfos(buffer, strParentPath, vecChildInfos90Attr))
             {
-                if (_Get90HAttrChildAttrInfos(buffer, strParentPath, vecChildAttrInfos))
-                {
-                    if (bHave20HAttr)
-                    {
-                        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-                    }
-                    _SortChildInfos(vecChildAttrInfos, uiDirNum);
-                    return TRUE;
-                }
-            }
-            else if (bHave20HAttr)
-            {
-                vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-                _SortChildInfos(vecChildAttrInfos, uiDirNum);
-                return TRUE;
+                return FALSE;
             }
         }
+        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfos90Attr.begin(), vecChildInfos90Attr.end());
+		vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
+        _SortChildInfos(vecChildAttrInfos, uiDirNum);
+        return TRUE;
     }
 
     return FALSE;
