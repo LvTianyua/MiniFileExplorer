@@ -20,25 +20,9 @@ typedef struct _ItemData
     UINT uiChildDirNum = 0;                    // 当前item子Dir数量
 }ItemData, *PItemData;
 
-class CMyList : public CListCtrl
-{
-public:
-    CMyList() = default;
-    ~CMyList() = default;
-
-	DECLARE_MESSAGE_MAP()
-
-public:
-	afx_msg void OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
-
-private:
-
-};
-
 // CMFCApplication1Dlg 对话框
 class CMFCApplication1Dlg : public CDialogEx
 {
-    friend class CMyList;
 // 构造
 public:
 	CMFCApplication1Dlg(CWnd* pParent = NULL);	// 标准构造函数
@@ -70,9 +54,9 @@ public:
     afx_msg void OnUpdateTie2(CCmdUI *pCmdUI);
     afx_msg void OnUpdateCopy(CCmdUI *pCmdUI);
     afx_msg void OnUpdateCut(CCmdUI *pCmdUI);
-    afx_msg void OnLvnEndScrollList2(NMHDR *pNMHDR, LRESULT *pResult);
     afx_msg void OnTvnItemexpandingTree1(NMHDR *pNMHDR, LRESULT *pResult);
     afx_msg void OnTvnDeleteitemTree1(NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg void OnLvnGetdispinfoList2(NMHDR *pNMHDR, LRESULT *pResult);
 
 // 实现
 protected:
@@ -100,7 +84,8 @@ protected:
     // 初始化list
     void InitListFiles();
     // 添加一個新listItem
-    void AddOneListItem(const FileAttrInfo& fileAttrInfo, const CString& strDriverName);
+    void AddOneListItem(LVITEM& item, const FileAttrInfo& fileAttrInfo, const CString& strDriverName);
+
     // 根据当前目录文件参考号展示全部子项list
     void ShowChildList(const int& nItemIndex);
     void ShowChildList(const UINT64& ui64FileNum, const CString& strDriverName);
@@ -124,7 +109,7 @@ private:
     // 左侧导航树
     CTreeCtrl m_treeMain;
     // 右侧文件列表
-    CMyList m_listFiles;
+    CListCtrl m_listFiles;
     // 当前路径显示
     CStatic m_staPath;
     // list总item数

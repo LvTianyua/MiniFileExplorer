@@ -693,7 +693,7 @@ BOOL CNTFSHelper::_GetOneFileAttrInfoByDataRunBuffer(const PBYTE pDataRunBuffer,
     memcpy(&fileAttrInfo.ui64FileUniNum, &pDataRunBuffer[uiIndexSPos], 6);
     if (fileAttrInfo.ui64FileUniNum <= 23)
     {
-		return FALSE;
+        return FALSE;
     }
 
     // 3.创建时间
