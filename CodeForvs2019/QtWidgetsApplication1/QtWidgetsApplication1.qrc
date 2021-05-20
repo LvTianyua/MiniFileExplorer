@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/QtWidgetsApplication1">
+        <file>res/myico.ico</file>
+        <file>res/computer.png</file>
+        <file>res/dir.png</file>
+        <file>res/driver.png</file>
+        <file>res/driversys.png</file>
+    </qresource>
+</RCC>
