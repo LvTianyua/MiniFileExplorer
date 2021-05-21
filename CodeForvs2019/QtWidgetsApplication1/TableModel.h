@@ -27,7 +27,7 @@ public:
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
 
-	using QObject::parent;
+    using QObject::parent;
 
 public:
     void SetVecAttrInfos(const std::vector<FileAttrInfo>& vecInfos) { m_vecAttrInfos = vecInfos; }

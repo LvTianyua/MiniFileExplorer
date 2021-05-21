@@ -2,16 +2,16 @@
 #include <qtableview.h>
 class QMyTableView : public QTableView
 {
-	Q_OBJECT
+    Q_OBJECT
 
 public:
-	explicit QMyTableView(QWidget* parent = nullptr);
-	~QMyTableView() = default;
+    explicit QMyTableView(QWidget* parent = nullptr);
+    ~QMyTableView() = default;
 
-	using QObject::parent;
+    using QObject::parent;
 
 protected:
-	virtual void mousePressEvent(QMouseEvent* event) override;
+    virtual void mousePressEvent(QMouseEvent* event) override;
 
 };
 

@@ -14,7 +14,7 @@ public:
 protected:
     void InitTreeView();
     void InitTableView();
-    void InitContextMenu();
+    void InitAction();
     void AddOneTreeItem(QTreeItem* pParentItem, const pFileAttrInfo pAttrInfo);
     CString GetDriverNameByPath(const CString& strPath);
     void ShowOneItemChildren(const QModelIndex& current);
@@ -22,8 +22,9 @@ protected:
     void EnterOneItem(const QModelIndex& index);
 
 protected:
-	virtual void keyReleaseEvent(QKeyEvent* ev) override;
-	virtual void contextMenuEvent(QContextMenuEvent* event) override;
+    virtual void keyReleaseEvent(QKeyEvent* ev) override;
+    virtual void contextMenuEvent(QContextMenuEvent* event) override;
+    virtual bool nativeEvent(const QByteArray& eventType, void* message, long* result) override;
 
 private slots:
     void slotTreeCurrentItemChanged(const QModelIndex &current, const QModelIndex &previous);
@@ -33,10 +34,10 @@ private slots:
 
     // 右键菜单相关槽函数
     void slotMenuOpen();
-	void slotMenuDel();
-	void slotMenuCopy();
-	void slotMenuCut();
-	void slotMenuPaste();
+    void slotMenuDel();
+    void slotMenuCopy();
+    void slotMenuCut();
+    void slotMenuPaste();
 
 private:
     Ui::QtWidgetsApplication1Class ui;
@@ -46,4 +47,13 @@ private:
 
     quint64                 m_ui64CurFileNum = 0;
     CString                 m_strCurFilePath;
+
+    // 文件复制剪切相关标记
+    bool m_bCut = false;
+    bool m_bCopying = false;
+    quint64 m_ui64SrcFileNum = 0;
+    quint64 m_ui64SrcFileSize = 0;
+    CString m_strSrcFilePath;
+
+    QProgressDialog* m_pProgressDlg = nullptr;
 };

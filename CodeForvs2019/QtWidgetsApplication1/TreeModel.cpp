@@ -140,13 +140,13 @@ QTreeItem * QTreeModel::root() const
 
 QModelIndex QTreeModel::GetItemIndexByInfo(const quint64& ui64FileNum, const CString& strDriverName) const
 {
-	if (m_pRootItem)
-	{
+    if (m_pRootItem)
+    {
         QTreeItem* pFindItem = m_pRootItem->FindIndexFromItemChild(ui64FileNum, strDriverName);
         if (pFindItem)
         {
-			return createIndex(pFindItem->row(), 0, static_cast<void*>(pFindItem));
+            return createIndex(pFindItem->row(), 0, static_cast<void*>(pFindItem));
         }
-	}
+    }
     return QModelIndex();
 }

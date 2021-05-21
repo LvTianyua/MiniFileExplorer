@@ -116,6 +116,10 @@ QString QTableModel::SizeToString(const UINT64& ui64FileSize) const
 {
     QString strSize;
     UINT64 ui64KBSize = ui64FileSize / 1024;
+    if (ui64FileSize % 1024 > 0)
+    {
+        ++ui64KBSize;
+    }
     return strSize.setNum(ui64KBSize) + u8" KB";
 }
 

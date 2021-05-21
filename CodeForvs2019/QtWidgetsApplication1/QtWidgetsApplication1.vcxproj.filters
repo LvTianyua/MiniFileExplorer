@@ -26,9 +26,6 @@
     <QtRcc Include="QtWidgetsApplication1.qrc">
       <Filter>Resource Files</Filter>
     </QtRcc>
-    <QtUic Include="QtWidgetsApplication1.ui">
-      <Filter>Form Files</Filter>
-    </QtUic>
     <QtMoc Include="QtWidgetsApplication1.h">
       <Filter>Header Files</Filter>
     </QtMoc>
@@ -89,5 +86,10 @@
     <QtMoc Include="MyTableView.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="QtWidgetsApplication1.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
   </ItemGroup>
 </Project>

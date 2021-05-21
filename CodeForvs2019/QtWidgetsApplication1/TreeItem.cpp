@@ -99,13 +99,13 @@ QTreeItem* QTreeItem::FindIndexFromItemChild(const quint64& ui64FileNum, const C
     }
     else
     {
-		for (quint32 ui = 0; ui < childCount(); ++ui)
-		{
+        for (quint32 ui = 0; ui < childCount(); ++ui)
+        {
             if (child(ui))
             {
-				return child(ui)->FindIndexFromItemChild(ui64FileNum, strDriverName);
+                return child(ui)->FindIndexFromItemChild(ui64FileNum, strDriverName);
             }
-		}
+        }
         return nullptr;
     }
 }
