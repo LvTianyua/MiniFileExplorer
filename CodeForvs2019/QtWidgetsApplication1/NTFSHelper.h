@@ -1,9 +1,16 @@
 #pragma once
+#include <vector>
 #include "SingleInstace.h"
 #include "INTFSHelper.h"
+#include <map>
 
 typedef struct _DataCompleteInfo
 {
+    bool operator<(const _DataCompleteInfo &rhs) const
+    {
+        return uiFirstFileNum < rhs.uiFirstFileNum;
+    }
+
     DataInfo dataInfo;
     UINT uiFirstFileNum = 0;
     UINT uiFinalFileNum = 0;

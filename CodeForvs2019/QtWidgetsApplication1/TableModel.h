@@ -32,6 +32,7 @@ public:
 public:
     void SetVecAttrInfos(const std::vector<FileAttrInfo>& vecInfos) { m_vecAttrInfos = vecInfos; }
     bool GetAttrInfoByIndex(const QModelIndex& index, FileAttrInfo& attrInfo) const;
+    void SetHoverRow(int row);
 
 protected:
     // SYSTIMEתCString
@@ -45,5 +46,6 @@ protected:
 
 private:
     std::vector<FileAttrInfo> m_vecAttrInfos;
+    int m_rowHover = -1;
 };
 

@@ -1085,100 +1085,43 @@ BOOL CNTFSHelper::_InitCurDriver()
                 std::vector<DataInfo> vecDataRunList;
                 if (_GetDataRunList(bufferMFT, uiDataRunSPos, uiDataRunLength, vecDataRunList))
                 {
-                     if (vecDataRunList.size() == 1)
+                     // 对mft的datarun进行再排序，主要是为了让所有的datarun按照文件参考号递增的顺序排序
+                     for (const auto& info : vecDataRunList)
                      {
                          DataCompleteInfo comInfo;
                          BYTE bufferFirst1[ONE_FILE_RECORD_SIZE + 1] = { 0 };
                          BYTE bufferFinnal1[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                         if (_GetAnySectionBuffer(vecDataRunList[0].ui64BeginScluster * ONE_CLUSTER_SIZE, ONE_FILE_RECORD_SIZE, bufferFirst1)
-                             && _GetAnySectionBuffer(vecDataRunList[0].ui64BeginScluster * ONE_CLUSTER_SIZE + vecDataRunList[0].ui64UsedSclusters * ONE_CLUSTER_SIZE - ONE_FILE_RECORD_SIZE, ONE_FILE_RECORD_SIZE, bufferFinnal1))
+                         if (_GetAnySectionBuffer(info.ui64BeginScluster * ONE_CLUSTER_SIZE, ONE_FILE_RECORD_SIZE, bufferFirst1)
+                             && _GetAnySectionBuffer(info.ui64BeginScluster * ONE_CLUSTER_SIZE + info.ui64UsedSclusters * ONE_CLUSTER_SIZE - ONE_FILE_RECORD_SIZE, ONE_FILE_RECORD_SIZE, bufferFinnal1))
                          {
                              UINT uiFileNumFirst1 = 0;
                              UINT uiFileNumFinnal1 = 0;
                              memcpy(&uiFileNumFirst1, &bufferFirst1[0x2C], 4);
                              memcpy(&uiFileNumFinnal1, &bufferFinnal1[0x2C], 4);
-                             comInfo.dataInfo = vecDataRunList[0];
+                             comInfo.dataInfo = info;
                              comInfo.uiFirstFileNum = uiFileNumFirst1;
                              comInfo.uiFinalFileNum = uiFileNumFinnal1;
+                             if (comInfo.uiFinalFileNum == 0)
+                             {
+                                 for (UINT64 ui64Spos = comInfo.dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE - 2 * ONE_FILE_RECORD_SIZE; ui64Spos >= 0; ui64Spos -= ONE_FILE_RECORD_SIZE)
+                                 {
+                                     BYTE bufferTmp[ONE_FILE_RECORD_SIZE + 1] = { 0 };
+                                     if (_GetAnySectionBuffer(comInfo.dataInfo.ui64BeginScluster * ONE_CLUSTER_SIZE + ui64Spos, ONE_FILE_RECORD_SIZE, bufferTmp))
+                                     {
+                                         UINT uiFileNumTmp = 0;
+                                         memcpy(&uiFileNumTmp, &bufferTmp[0x2C], 4);
+                                         if (uiFileNumTmp != 0)
+                                         {
+                                             comInfo.uiFinalFileNum = uiFileNumTmp;
+                                             break;
+                                         }
+                                     }
+                                 }
+                             }
                              m_vecMFTDataCompRunList.push_back(comInfo);
                          }
                      }
-                     // 对mft的datarun进行再排序，主要是为了让所有的datarun按照文件参考号递增的顺序排序
-                     for (UINT ui = 0; ui < vecDataRunList.size() && (ui + 1) < vecDataRunList.size(); ++ui)
-                     {
-                         DataCompleteInfo comInfo;
-                         BYTE bufferFirst1[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                         BYTE bufferFirst2[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                         BYTE bufferFinnal1[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                         BYTE bufferFinnal2[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                         if (_GetAnySectionBuffer(vecDataRunList[ui].ui64BeginScluster * ONE_CLUSTER_SIZE, ONE_FILE_RECORD_SIZE, bufferFirst1)
-                             && _GetAnySectionBuffer(vecDataRunList[ui + 1].ui64BeginScluster * ONE_CLUSTER_SIZE, ONE_FILE_RECORD_SIZE, bufferFirst2)
-                             && _GetAnySectionBuffer(vecDataRunList[ui].ui64BeginScluster * ONE_CLUSTER_SIZE + vecDataRunList[ui].ui64UsedSclusters * ONE_CLUSTER_SIZE - ONE_FILE_RECORD_SIZE, ONE_FILE_RECORD_SIZE, bufferFinnal1)
-                             && _GetAnySectionBuffer(vecDataRunList[ui + 1].ui64BeginScluster * ONE_CLUSTER_SIZE + vecDataRunList[ui + 1].ui64UsedSclusters * ONE_CLUSTER_SIZE - ONE_FILE_RECORD_SIZE, ONE_FILE_RECORD_SIZE, bufferFinnal2))
-                         {
-                             UINT uiFileNumFirst1 = 0;
-                             UINT uiFileNumFirst2 = 0;
-                             UINT uiFileNumFinnal1 = 0;
-                             UINT uiFileNumFinnal2 = 0;
-                             memcpy(&uiFileNumFirst1, &bufferFirst1[0x2C], 4);
-                             memcpy(&uiFileNumFirst2, &bufferFirst2[0x2C], 4);
-                             memcpy(&uiFileNumFinnal1, &bufferFinnal1[0x2C], 4);
-                             memcpy(&uiFileNumFinnal2, &bufferFinnal2[0x2C], 4);
- 
-                             bool bSwap = false;
-                             if (uiFileNumFirst1 > uiFileNumFirst2)
-                             {
-                                 bSwap = true;
-                                 comInfo.dataInfo = vecDataRunList[ui + 1];
-                                 comInfo.uiFirstFileNum = uiFileNumFirst2;
-                                 comInfo.uiFinalFileNum = uiFileNumFinnal2;
-                             }
-                             else
-                             {
-                                 comInfo.dataInfo = vecDataRunList[ui];
-                                 comInfo.uiFirstFileNum = uiFileNumFirst1;
-                                 comInfo.uiFinalFileNum = uiFileNumFinnal1;
-                             }
-                             m_vecMFTDataCompRunList.push_back(comInfo);
-                             if (ui + 2 == vecDataRunList.size())
-                             {
-                                 if (bSwap)
-                                 {
-                                     comInfo.dataInfo = vecDataRunList[ui];
-                                     comInfo.uiFirstFileNum = uiFileNumFirst1;
-                                     comInfo.uiFinalFileNum = uiFileNumFinnal1;
-                                 }
-                                 else
-                                 {
-                                     comInfo.dataInfo = vecDataRunList[ui + 1];
-                                     comInfo.uiFirstFileNum = uiFileNumFirst2;
-                                     comInfo.uiFinalFileNum = uiFileNumFinnal2;
-                                 }
-                                 m_vecMFTDataCompRunList.push_back(comInfo);
-                             }
-                             if (bSwap)
-                             {
-                                 std::swap(vecDataRunList[ui], vecDataRunList[ui + 1]);
-                             }
-                         }
-                     }
-                     if (m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].uiFinalFileNum == 0)
-                     {
-                         for (UINT64 ui64Spos = m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].dataInfo.ui64UsedSclusters * ONE_CLUSTER_SIZE - 2 * ONE_FILE_RECORD_SIZE; ui64Spos >= 0; ui64Spos -= ONE_FILE_RECORD_SIZE)
-                         {
-                             BYTE bufferTmp[ONE_FILE_RECORD_SIZE + 1] = { 0 };
-                             if (_GetAnySectionBuffer(m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].dataInfo.ui64BeginScluster * ONE_CLUSTER_SIZE + ui64Spos, ONE_FILE_RECORD_SIZE, bufferTmp))
-                             {
-                                 UINT uiFileNumTmp = 0;
-                                 memcpy(&uiFileNumTmp, &bufferTmp[0x2C], 4);
-                                 if (uiFileNumTmp != 0)
-                                 {
-                                     m_vecMFTDataCompRunList[m_vecMFTDataCompRunList.size() - 1].uiFinalFileNum = uiFileNumTmp;
-                                     break;
-                                 }
-                             }
-                         }
-                     }
+                     std::sort(m_vecMFTDataCompRunList.begin(), m_vecMFTDataCompRunList.end());
                      m_mapDriverCompInfos.insert(std::make_pair(m_strCurDriverName, m_vecMFTDataCompRunList));
                     return TRUE;
                 }
@@ -1259,17 +1202,15 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
         _AutoGetFullPath(buffer, strParentPath);
         UINT uiAttrSPos = 0;
         UINT uiAttrLength = 0;
-        BOOL bHave20HAttr = FALSE;
         UINT uiDirNumIn20HAttr = 0;
         std::vector<FileAttrInfo> vecChildInfosIn20Attr;
         // 先看有没有20属性，有的话，先去20属性里面把对应的A0和90的子项集合拿出来
         if (_FindAnyAttrSPosByFileRecord(buffer, 0x20, uiAttrSPos, uiAttrLength))
         {
-            bHave20HAttr = TRUE;
-            if (!_GetA0HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr))
-            {
-                _Get90HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr);
-            }
+			std::vector<FileAttrInfo> vecChildInfoIn90;
+            _GetA0HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfosIn20Attr, uiDirNumIn20HAttr);
+		    _Get90HAttrChildListFrom20HAttr(buffer, strParentPath, vecChildInfoIn90, uiDirNumIn20HAttr);
+            vecChildInfosIn20Attr.insert(vecChildInfosIn20Attr.end(), vecChildInfoIn90.begin(), vecChildInfoIn90.end());
         }
 
         uiAttrSPos = 0;
@@ -1286,41 +1227,27 @@ BOOL CNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
                 {
                     strParentPath = m_strCurDriverName + L":";
                 } 
-                if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
+                if (!CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
                 {
-                    if (bHave20HAttr)
-                    {
-                        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-                    }
-                    _SortChildInfos(vecChildAttrInfos, uiDirNum);
-                    return TRUE;
+                    return FALSE;
                 }
             }
         }
-        else
+        // 90索引项就在属性体里面，直接拿就行
+        uiAttrSPos = 0;
+        uiAttrLength = 0;
+        std::vector<FileAttrInfo> vecChildInfos90Attr;
+        if (_FindAnyAttrSPosByFileRecord(buffer, 0x90, uiAttrSPos, uiAttrLength))
         {
-            // 90索引项就在属性体里面，直接拿就行
-            uiAttrSPos = 0;
-            UINT uiAttrLength = 0;
-            if (_FindAnyAttrSPosByFileRecord(buffer, 0x90, uiAttrSPos, uiAttrLength))
+            if (!_Get90HAttrChildAttrInfos(buffer, strParentPath, vecChildInfos90Attr))
             {
-                if (_Get90HAttrChildAttrInfos(buffer, strParentPath, vecChildAttrInfos))
-                {
-                    if (bHave20HAttr)
-                    {
-                        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-                    }
-                    _SortChildInfos(vecChildAttrInfos, uiDirNum);
-                    return TRUE;
-                }
-            }
-            else if (bHave20HAttr)
-            {
-                vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
-                _SortChildInfos(vecChildAttrInfos, uiDirNum);
-                return TRUE;
+                return FALSE;
             }
         }
+        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfos90Attr.begin(), vecChildInfos90Attr.end());
+		vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildInfosIn20Attr.begin(), vecChildInfosIn20Attr.end());
+        _SortChildInfos(vecChildAttrInfos, uiDirNum);
+        return TRUE;
     }
 
     return FALSE;

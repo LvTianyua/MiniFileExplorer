@@ -80,8 +80,9 @@ void QtWidgetsApplication1::InitTableView()
     pTable->setEditTriggers(QTreeView::NoEditTriggers);			//单元格不能编辑
     pTable->setSelectionBehavior(QTreeView::SelectRows);			//一次选中整行
     pTable->setSelectionMode(QTreeView::SingleSelection);        //单选，配合上面的整行就是一次选单行
+    pTable->setMouseTracking(true);
     pTable->setFocusPolicy(Qt::NoFocus);                         //去掉鼠标移到单元格上时的虚线框
-    pTable->setStyleSheet("QTableView::item{selection-background-color:rgb(135,206,250);}");// 设置选中行颜色，QSS语句实现
+    pTable->setStyleSheet("QTableView::item:selected{background:rgb(204,232,255);border-bottom:1px solid rgb(153,209,255);border-top:1px solid rgb(153,209,255);}");// 设置选中行颜色，QSS语句实现
     QHeaderView* pHHeader = pTable->horizontalHeader();
     if (pHHeader)
     {
@@ -572,7 +573,7 @@ void QtWidgetsApplication1::slotMenuPaste()
     }
     else
     {
-        CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath.Mid(0, 1));
+        CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath[0]);
         bSuc = CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
         CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath[0]));
     }

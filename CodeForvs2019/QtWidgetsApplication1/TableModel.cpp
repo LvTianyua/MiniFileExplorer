@@ -1,5 +1,6 @@
 #include "TableModel.h"
 #include "NTFSHelper.h"
+#include "MyTableView.h"
 
 QTableModel::QTableModel(QObject *parent /*= nullptr*/)
     : QAbstractTableModel(parent)
@@ -43,6 +44,13 @@ QVariant QTableModel::data(const QModelIndex &index, int role) const
     else if (role == Qt::DecorationRole && index.column() == 0)
     {
         return GetIconByFileAttr(attrInfo);
+    }
+    else if (role == Qt::BackgroundRole)
+    {
+        if (index.row() == m_rowHover)
+        {
+            return QColor(229,243,255);
+        }
     }
 
     return QVariant();
@@ -101,15 +109,20 @@ bool QTableModel::GetAttrInfoByIndex(const QModelIndex& index, FileAttrInfo& att
     return true;
 }
 
+void QTableModel::SetHoverRow(int row)
+{
+    m_rowHover = row;
+}
+
 QString QTableModel::TimeToString(const SYSTEMTIME& systemTime) const
 {
-    QString strTime;
     if (systemTime.wYear == 0 && systemTime.wMonth == 0 && systemTime.wDay == 0 && systemTime.wHour == 0 && systemTime.wMinute == 0)
     {
-        return strTime;
+        return QString();
     }
-    strTime.asprintf("%02d/%02d/%02d %02d:%02d", systemTime.wYear, systemTime.wMonth, systemTime.wDay, systemTime.wHour, systemTime.wMinute);
-    return strTime;
+    CString strTmp;
+    strTmp.Format(L"%02d/%02d/%02d %02d:%02d", systemTime.wYear, systemTime.wMonth, systemTime.wDay, systemTime.wHour, systemTime.wMinute);
+    return CNTFSHelper::CStringToQString(strTmp);
 }
 
 QString QTableModel::SizeToString(const UINT64& ui64FileSize) const
