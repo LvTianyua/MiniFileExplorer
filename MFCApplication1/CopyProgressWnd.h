@@ -23,6 +23,7 @@ public:
     void SetCopyInfo(const UINT64& ui64FileNum, const UINT64& ui64FileSize, const CString& strSrcFilePath, const CString& strDestFilePath);
 
     afx_msg LRESULT OnUpdateProgress(WPARAM wParam = 0, LPARAM lParam = 0);
+    afx_msg LRESULT OnEndProgressWnd(WPARAM wParam = 0, LPARAM lParam = 0);
 
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV Ö§³Ö

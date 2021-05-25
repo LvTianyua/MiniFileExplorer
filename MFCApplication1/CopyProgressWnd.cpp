@@ -30,15 +30,20 @@ BOOL CCopyProgressWnd::OnInitDialog()
     {
         CNTFSHelper::GetInstance()->SetProgressWndHandle(GetSafeHwnd());
         CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath.Mid(0, 1));
-        if (CNTFSHelper::GetInstance()->MyCopyFile(m_ui64FileNum, m_ui64FileSize, m_strDestFilePath))
+        std::thread([=]() 
         {
-            CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(m_strDestFilePath.Mid(0, 1)));
-            EndDialog(IDOK);
-            return TRUE;
-        }
-        CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(m_strDestFilePath.Mid(0, 1)));
+            if (CNTFSHelper::GetInstance()->MyCopyFile(m_ui64FileNum, m_ui64FileSize, m_strDestFilePath))
+            {
+                CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(m_strDestFilePath.Mid(0, 1)));
+                PostMessage(MSG_END_PROGRESS_WND, (WPARAM)IDOK);
+            }
+            else
+            {
+                CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(m_strDestFilePath.Mid(0, 1)));
+                PostMessage(MSG_END_PROGRESS_WND, (WPARAM)IDCANCEL);
+            }
+        }).detach();
     }
-    EndDialog(IDCANCEL);
 
     return TRUE;
 }
@@ -75,6 +80,12 @@ LRESULT CCopyProgressWnd::OnUpdateProgress(WPARAM wParam /*= 0*/, LPARAM lParam 
     return S_OK;
 }
 
+LRESULT CCopyProgressWnd::OnEndProgressWnd(WPARAM wParam /*= 0*/, LPARAM lParam /*= 0*/)
+{
+    EndDialog((BOOL)wParam);
+    return S_OK;
+}
+
 void CCopyProgressWnd::DoDataExchange(CDataExchange* pDX)
 {
     CDialogEx::DoDataExchange(pDX);
@@ -85,6 +96,7 @@ void CCopyProgressWnd::DoDataExchange(CDataExchange* pDX)
 
 BEGIN_MESSAGE_MAP(CCopyProgressWnd, CDialogEx)
     ON_MESSAGE(MSG_UPDATE_PROGRESS, &CCopyProgressWnd::OnUpdateProgress)
+    ON_MESSAGE(MSG_END_PROGRESS_WND, &CCopyProgressWnd::OnEndProgressWnd)
 END_MESSAGE_MAP()
 
 

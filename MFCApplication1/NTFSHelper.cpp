@@ -1585,7 +1585,7 @@ BOOL CNTFSHelper::_BigFileBlockReadAndWrite(const std::vector<DataInfo>& vecData
             // POST
             if (::IsWindow(m_hProgressWnd))
             {
-                ::SendMessage(m_hProgressWnd, MSG_UPDATE_PROGRESS, (WPARAM)dPercent, 0);
+                ::PostMessage(m_hProgressWnd, MSG_UPDATE_PROGRESS, (WPARAM)dPercent, 0);
             }
         }
         // 每一块datarun读完都校验一下

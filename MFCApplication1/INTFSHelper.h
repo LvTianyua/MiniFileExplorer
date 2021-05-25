@@ -3,6 +3,7 @@
 #include <vector>
 
 #define MSG_UPDATE_PROGRESS  WM_USER + 0x01
+#define MSG_END_PROGRESS_WND  WM_USER + 0x02
 
 #pragma pack(1)
 typedef struct _NTFSDBR {
