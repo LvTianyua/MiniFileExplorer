@@ -86,8 +86,22 @@ public:
     *
     *  取消拷贝任务
     *
-    * @return 成功 TRUE 失败 FALSE
     */
-    virtual BOOL CancelCopyTask() = 0;
+    virtual void CancelCopyTask() = 0;
+
+    /**
+    *
+    *  获取上一次拷贝失败任务是不是因为取消失败的
+    *
+    * @return 是 TRUE 否 FALSE
+    */
+    virtual BOOL IsCopyTaskByCancel() = 0;
+
+    /**
+    *
+    *  重置拷贝任务取消状态的标志
+    *
+    */
+    virtual void ResetCopyTaskFlag() = 0;
 };
 

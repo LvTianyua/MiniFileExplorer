@@ -44,7 +44,13 @@ public:
     virtual void SetProgressWndHandle(const HWND& hProgressWnd) override;
 
     // 取消拷贝任务
-    virtual BOOL CancelCopyTask() override;
+    virtual void CancelCopyTask() override;
+
+    // 获取上一次拷贝失败任务是不是因为取消失败的
+    virtual BOOL IsCopyTaskByCancel() override;
+
+    // 重置拷贝任务取消状态的标志
+    virtual void ResetCopyTaskFlag() override;
 
     // CString转换成QString
     static QString CStringToQString(const CString& strCs);
@@ -160,6 +166,12 @@ protected:
 
     // 初始化磁盘
     BOOL _InitCurDriver();
+
+    // 对比两个文件md5
+    BOOL _CompareFileMd5(const CString& strFilePath1, const CString& strFilePath2);
+
+    // 获取某文件md5值
+    BOOL _GetFileMd5(const CString& strFilePath, QByteArray& md5);
 
     void _ClearDataMapBuffer(const CString& strLastDriverName);
 

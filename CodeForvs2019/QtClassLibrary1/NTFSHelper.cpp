@@ -412,6 +412,10 @@ BOOL QNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, con
             memcpy(&uiSecondAttrType, &pRecordBuffer[uiA0HSPos], 4);
             if (uiSecondAttrType != 0xA0)
             {
+                if (uiSecondAttrType > 0xA0)
+                {
+                    break;
+                }
                 memcpy(&uiFirstAttrLength, &pRecordBuffer[uiA0HSPos + 0x04], 2);
                 uiA0HSPos += uiFirstAttrLength;
                 continue;
@@ -437,7 +441,7 @@ BOOL QNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, con
             {
                 // 遍历datarun，拿到全部簇流的起始位置和占用长度（单位：簇）
                 std::vector<DataInfo> vecDataRunLists;
-                if (QNTFSHelper::GetInstance()->_GetA0HAttrDataRunLists(newRecordBuffer, vecDataRunLists))
+                if (_GetA0HAttrDataRunLists(newRecordBuffer, vecDataRunLists))
                 {
                     // 从datarun获取所有子项
                     CString strPath = strParentPath;
@@ -445,14 +449,16 @@ BOOL QNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, con
                     {
                         strPath = m_strCurDriverName + L":";
                     }
-                    if (QNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strPath, vecDataRunLists, vecChildAttrInfos))
+                    std::vector<FileAttrInfo> vecChildAttrInfosTmp;
+                    if (_GetChildFileAttrInfoByRunList(strPath, vecDataRunLists, vecChildAttrInfosTmp))
                     {
-                        return TRUE;
+                        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildAttrInfosTmp.begin(), vecChildAttrInfosTmp.end());
                     }
                 }
             }
 
-            break;
+            memcpy(&uiFirstAttrLength, &pRecordBuffer[uiA0HSPos + 0x04], 2);
+            uiA0HSPos += uiFirstAttrLength;
         }
     }
 
@@ -1131,6 +1137,62 @@ BOOL QNTFSHelper::_InitCurDriver()
     return FALSE;
 }
 
+BOOL QNTFSHelper::_CompareFileMd5(const CString& strFilePath1, const CString& strFilePath2)
+{
+    QByteArray md5File1, md5File2;
+    return _GetFileMd5(strFilePath1, md5File1) && _GetFileMd5(strFilePath2, md5File2) && md5File1 == md5File2;
+}
+
+BOOL QNTFSHelper::_GetFileMd5(const CString& strFilePath, QByteArray& md5)
+{
+    QString strPath(CStringToQString(strFilePath));
+
+    QFile localFile(strPath);
+
+    if (!localFile.open(QFile::ReadOnly))
+    {
+        qDebug() << "file open error.";
+        return FALSE;
+    }
+
+    QCryptographicHash ch(QCryptographicHash::Md5);
+
+    quint64 totalBytes = 0;
+    quint64 bytesWritten = 0;
+    quint64 bytesToWrite = 0;
+    quint64 loadSize = 1024 * 4;
+    QByteArray buf;
+
+    totalBytes = localFile.size();
+    bytesToWrite = totalBytes;
+
+    while (1)
+    {
+        if (bytesToWrite > 0)
+        {
+            buf = localFile.read(qMin(bytesToWrite, loadSize));
+            ch.addData(buf);
+            bytesWritten += buf.length();
+            bytesToWrite -= buf.length();
+            buf.resize(0);
+        }
+        else
+        {
+            break;
+        }
+
+        if (bytesWritten == totalBytes)
+        {
+            break;
+        }
+    }
+
+    localFile.close();
+    md5 = ch.result();
+
+    return TRUE;
+}
+
 void QNTFSHelper::_ClearDataMapBuffer(const CString& strLastDriverName)
 {
     m_mapDriverFileNumBuffers[strLastDriverName] = m_mapFileNumRecordBuffer;
@@ -1139,6 +1201,7 @@ void QNTFSHelper::_ClearDataMapBuffer(const CString& strLastDriverName)
 BOOL QNTFSHelper::MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64SrcFileSize, const CString& strDestPath)
 {
     // 1.读取源文件文件记录
+    BOOL bSuc = FALSE;
     BYTE buffer[ONE_FILE_RECORD_SIZE + 1] = { 0 };
     if (_GetFileRecordByFileRefNum2(ui64SrcFileNum, buffer))
     {
@@ -1151,14 +1214,13 @@ BOOL QNTFSHelper::MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64Src
             {
                 return FALSE;
             }
-            BOOL bRet = _WriteFileFromBuffer(pFlieDataBuffer, ui64SrcFileSize, strDestPath);
+            bSuc = _WriteFileFromBuffer(pFlieDataBuffer, ui64SrcFileSize, strDestPath);
             VirtualFree(pFlieDataBuffer, 0, MEM_RELEASE);
             if (m_hFile)
             {
                 CloseHandle(m_hFile);
                 m_hFile = NULL;
             }
-            return bRet;
         }
         else
         {
@@ -1167,10 +1229,23 @@ BOOL QNTFSHelper::MyCopyFile(const UINT64& ui64SrcFileNum, const UINT64& ui64Src
             {
                 return FALSE;
             }
-            return _BigFileBlockReadAndWrite(vecDataInfos, strDestPath, ui64SrcFileSize);
+            bSuc = _BigFileBlockReadAndWrite(vecDataInfos, strDestPath, ui64SrcFileSize);
         }
     }
-    return FALSE;
+
+//     if (bSuc)
+//     {
+//         CString strSrcPath;
+//         if (GetFilePathByFileNum(ui64SrcFileNum, strSrcPath) && PathFileExists(strSrcPath) && PathFileExists(strDestPath) && _CompareFileMd5(strSrcPath, strDestPath))
+//         {
+//         }
+//         else
+//         {
+//             qDebug() << "md5 compare error.";
+//             bSuc = FALSE;
+//         }
+//     }
+    return bSuc;
 }
 
 BOOL QNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum, std::vector<FileAttrInfo>& vecChildAttrInfos, UINT& uiDirNum, BOOL bForceFresh/* = FALSE*/)
@@ -1220,14 +1295,14 @@ BOOL QNTFSHelper::GetAllChildInfosByParentRefNum(const UINT64& ui64ParentRefNum,
         {
             // 遍历datarun，拿到全部簇流的起始位置和占用长度（单位：簇）
             std::vector<DataInfo> vecDataRunLists;
-            if (QNTFSHelper::GetInstance()->_GetA0HAttrDataRunLists(buffer, vecDataRunLists))
+            if (_GetA0HAttrDataRunLists(buffer, vecDataRunLists))
             {
                 // 从datarun获取所有子项
                 if (strParentPath == L".")
                 {
                     strParentPath = m_strCurDriverName + L":";
                 }
-                if (!QNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
+                if (!_GetChildFileAttrInfoByRunList(strParentPath, vecDataRunLists, vecChildAttrInfos))
                 {
                     return FALSE;
                 }
@@ -1293,10 +1368,19 @@ void QNTFSHelper::SetProgressWndHandle(const HWND& hProgressWnd)
     m_hProgressWnd = hProgressWnd;
 }
 
-BOOL QNTFSHelper::CancelCopyTask()
+void QNTFSHelper::CancelCopyTask()
 {
     m_bCancelCopy = TRUE;
-    return TRUE;
+}
+
+BOOL QNTFSHelper::IsCopyTaskByCancel()
+{
+    return m_bCancelCopy;
+}
+
+void QNTFSHelper::ResetCopyTaskFlag()
+{
+    m_bCancelCopy = FALSE;
 }
 
 QString QNTFSHelper::CStringToQString(const CString& strCs)

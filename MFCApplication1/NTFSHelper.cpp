@@ -412,6 +412,10 @@ BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, con
             memcpy(&uiSecondAttrType, &pRecordBuffer[uiA0HSPos], 4);
             if (uiSecondAttrType != 0xA0)
             {
+                if (uiSecondAttrType > 0xA0)
+                {
+                    break;
+                }
                 memcpy(&uiFirstAttrLength, &pRecordBuffer[uiA0HSPos + 0x04], 2);
                 uiA0HSPos += uiFirstAttrLength;
                 continue;
@@ -445,14 +449,16 @@ BOOL CNTFSHelper::_GetA0HAttrChildListFrom20HAttr(const PBYTE pRecordBuffer, con
                     {
                         strPath = m_strCurDriverName + L":";
                     }
-                    if (CNTFSHelper::GetInstance()->_GetChildFileAttrInfoByRunList(strPath, vecDataRunLists, vecChildAttrInfos))
+                    std::vector<FileAttrInfo> vecChildAttrInfosTmp;
+                    if (_GetChildFileAttrInfoByRunList(strPath, vecDataRunLists, vecChildAttrInfosTmp))
                     {
-                        return TRUE;
+                        vecChildAttrInfos.insert(vecChildAttrInfos.end(), vecChildAttrInfosTmp.begin(), vecChildAttrInfosTmp.end());
                     }
                 }
             }
 
-            break;
+            memcpy(&uiFirstAttrLength, &pRecordBuffer[uiA0HSPos + 0x04], 2);
+            uiA0HSPos += uiFirstAttrLength;
         }
     }
 

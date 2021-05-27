@@ -339,6 +339,15 @@ bool QtWidgetsApplication1::nativeEvent(const QByteArray& eventType, void* messa
     {
         if (m_pProgressDlg)
         {
+            if (m_pProgressDlg->wasCanceled())
+            {
+                QNTFSHelper::GetInstance()->CancelCopyTask();
+                return true;
+            }
+            if ((int)(double)pMsg->wParam > 99)
+            {
+                pMsg->wParam = 99;
+            }
             m_pProgressDlg->setValue((int)(double)pMsg->wParam);
         }
         return true;
@@ -418,11 +427,6 @@ void QtWidgetsApplication1::slotTableCurrentItemChanged(const QModelIndex& curre
             }
         }
     }
-}
-
-void QtWidgetsApplication1::slotCancelCopy()
-{
-    QNTFSHelper::GetInstance()->CancelCopyTask();
 }
 
 void QtWidgetsApplication1::slotMenuOpen()
@@ -564,11 +568,10 @@ void QtWidgetsApplication1::slotMenuPaste()
     {
         if (m_pProgressDlg == nullptr)
         {
-            m_pProgressDlg = new QProgressDialog(u8"拷贝中...", "Cancel", 0, 100, this);
-            connect(m_pProgressDlg, &QProgressDialog::canceled, this, &QtWidgetsApplication1::slotCancelCopy);
+            m_pProgressDlg = new QProgressDialog(u8"拷贝中...", QString(), 0, 100, this, Qt::WindowCloseButtonHint);
         }
         m_pProgressDlg->setWindowModality(Qt::WindowModal);
-        m_pProgressDlg->showNormal();
+        m_pProgressDlg->setMinimumDuration(1000);
 
         if (QNTFSHelper::GetInstance())
         {
@@ -591,16 +594,31 @@ void QtWidgetsApplication1::slotMenuPaste()
         {
             DeleteFile(m_strSrcFilePath);
         }
+        ShowFileList(m_ui64CurFileNum, m_strCurFilePath, true);
         if (m_pProgressDlg)
         {
             m_pProgressDlg->setValue(100);
         }
-        ShowFileList(m_ui64CurFileNum, m_strCurFilePath, true);
         QMessageBox::information(this, u8"提示", u8"文件拷贝完成！");
     }
     else
     {
-        QMessageBox::critical(this, u8"错误", u8"文件复制或剪切过程出现错误！");
+        if (QNTFSHelper::GetInstance())
+        {
+            if (!QNTFSHelper::GetInstance()->IsCopyTaskByCancel())
+            {
+                QMessageBox::critical(this, u8"错误", u8"文件复制或剪切过程出现错误！");
+            }
+            else
+            {
+                if (m_pProgressDlg)
+                {
+                    m_pProgressDlg->reset();
+                }
+                QNTFSHelper::GetInstance()->ResetCopyTaskFlag();
+                ShowFileList(m_ui64CurFileNum, m_strCurFilePath, true);
+            }
+        }
     }
 
     m_bCut = false;
