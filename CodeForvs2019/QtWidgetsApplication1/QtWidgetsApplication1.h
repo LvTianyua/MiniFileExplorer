@@ -31,6 +31,7 @@ private slots:
     void slotExpanded(const QModelIndex &current);
     void slotTableItemDBClicked(const QModelIndex& index);
     void slotTableCurrentItemChanged(const QModelIndex& current, const QModelIndex& previous);
+    void slotCancelCopy();
 
     // 右键菜单相关槽函数
     void slotMenuOpen();

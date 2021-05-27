@@ -81,5 +81,13 @@ public:
     * @return 成功 TRUE 失败 FALSE
     */
     virtual void SetProgressWndHandle(const HWND& hProgressWnd) = 0;
+
+    /**
+    *
+    *  取消拷贝任务
+    *
+    * @return 成功 TRUE 失败 FALSE
+    */
+    virtual BOOL CancelCopyTask() = 0;
 };
 

@@ -1,12 +1,11 @@
 #pragma once
-#include <vector>
 #include "SingleInstace.h"
 #include "INTFSHelper.h"
-#include <map>
+#include "qtclasslibrary1_global.h"
 
 typedef struct _DataCompleteInfo
 {
-    bool operator<(const _DataCompleteInfo &rhs) const
+    bool operator<(const _DataCompleteInfo& rhs) const
     {
         return uiFirstFileNum < rhs.uiFirstFileNum;
     }
@@ -14,13 +13,12 @@ typedef struct _DataCompleteInfo
     DataInfo dataInfo;
     UINT uiFirstFileNum = 0;
     UINT uiFinalFileNum = 0;
-} DataCompleteInfo, *PDataCompleteInfo;
+} DataCompleteInfo, * PDataCompleteInfo;
 
-
-class CNTFSHelper : public CSingleInstace<CNTFSHelper>, public INTFSHelper
+class QTCLASSLIBRARY1_EXPORT QNTFSHelper : public CSingleInstace<QNTFSHelper>, public INTFSHelper
 {
 private:
-    ~CNTFSHelper();
+    ~QNTFSHelper();
 public:
     // 设置当前盘符
     virtual BOOL SetCurDriverInfo(const CString& strDriverName) override;
@@ -44,6 +42,9 @@ public:
 
     // 设置进度条窗口句柄
     virtual void SetProgressWndHandle(const HWND& hProgressWnd) override;
+
+    // 取消拷贝任务
+    virtual BOOL CancelCopyTask() override;
 
     // CString转换成QString
     static QString CStringToQString(const CString& strCs);
@@ -163,7 +164,7 @@ protected:
     void _ClearDataMapBuffer(const CString& strLastDriverName);
 
     template<typename T>
-    void _SafeDelete(T* ptr) 
+    void _SafeDelete(T* ptr)
     {
         if (ptr)
         {
@@ -193,5 +194,5 @@ private:
     std::map<CString, std::map<UINT64, PBYTE>> m_mapDriverFileNumBuffers;              // 磁盘，FileNumBuffer映射
     std::vector<CString>                            m_vecFilterNames;
     BOOL                                            m_bInit = FALSE;
+    BOOL                                            m_bCancelCopy = FALSE;
 };
-

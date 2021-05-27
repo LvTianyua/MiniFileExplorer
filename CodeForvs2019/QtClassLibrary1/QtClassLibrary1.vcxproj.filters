@@ -13,23 +13,16 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>qrc;rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Form Files">
-      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
-      <Extensions>ui</Extensions>
-    </Filter>
     <Filter Include="Translation Files">
       <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
       <Extensions>ts</Extensions>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <QtRcc Include="QtWidgetsApplication1.qrc">
-      <Filter>Resource Files</Filter>
-    </QtRcc>
-    <QtMoc Include="QtWidgetsApplication1.h">
+    <ClInclude Include="qtclasslibrary1_global.h">
       <Filter>Header Files</Filter>
-    </QtMoc>
-    <ClCompile Include="QtWidgetsApplication1.cpp">
+    </ClInclude>
+    <ClCompile Include="NTFSHelper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClInclude Include="stdafx.h">
@@ -38,43 +31,17 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TableModel.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TreeItem.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TreeModel.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MyTableView.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="TreeItem.h">
+    <ClInclude Include="common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <QtMoc Include="TreeModel.h">
+    <ClInclude Include="INTFSHelper.h">
       <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="TableModel.h">
+    </ClInclude>
+    <ClInclude Include="SingleInstace.h">
       <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="MyTableView.h">
+    </ClInclude>
+    <ClInclude Include="NTFSHelper.h">
       <Filter>Header Files</Filter>
-    </QtMoc>
-  </ItemGroup>
-  <ItemGroup>
-    <QtUic Include="QtWidgetsApplication1.ui">
-      <Filter>Form Files</Filter>
-    </QtUic>
+    </ClInclude>
   </ItemGroup>
 </Project>

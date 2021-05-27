@@ -48,7 +48,7 @@ void QtWidgetsApplication1::InitTreeView()
     pComputer->setPtr(pRootInfo);
     root->appendChild(pComputer);
 
-    std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+    std::vector<CString> vecDriverNames = QNTFSHelper::GetInstance()->GetAllLogicDriversNames();
     for (const auto& driverName : vecDriverNames)
     {
         pFileAttrInfo pInfo = new FileAttrInfo;
@@ -98,7 +98,7 @@ void QtWidgetsApplication1::InitTableView()
         return;
     }
     std::vector<FileAttrInfo> vecFileInfos;
-    std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+    std::vector<CString> vecDriverNames = QNTFSHelper::GetInstance()->GetAllLogicDriversNames();
     for (const auto& driverName : vecDriverNames)
     {
         FileAttrInfo info;
@@ -193,8 +193,8 @@ void QtWidgetsApplication1::ShowOneItemChildren(const QModelIndex& current)
             }
             UINT uiDirNum = 0;
             std::vector<FileAttrInfo> childInfos;
-            if (pItem->ptr() && CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->SetCurDriverInfo(GetDriverNameByPath(pItem->ptr()->strFilePath))
-                && CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(pItem->ptr()->ui64FileUniNum, childInfos, uiDirNum) && uiDirNum > 0)
+            if (pItem->ptr() && QNTFSHelper::GetInstance() && QNTFSHelper::GetInstance()->SetCurDriverInfo(GetDriverNameByPath(pItem->ptr()->strFilePath))
+                && QNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(pItem->ptr()->ui64FileUniNum, childInfos, uiDirNum) && uiDirNum > 0)
             {
                 for (UINT ui = 0; ui < uiDirNum && ui < childInfos.size(); ++ui)
                 {
@@ -223,7 +223,7 @@ void QtWidgetsApplication1::ShowFileList(const UINT64& ui64FileNum, const CStrin
     std::vector<FileAttrInfo> vecFileInfos;
     if (ui64FileNum == 0)
     {
-        std::vector<CString> vecDriverNames = CNTFSHelper::GetInstance()->GetAllLogicDriversNames();
+        std::vector<CString> vecDriverNames = QNTFSHelper::GetInstance()->GetAllLogicDriversNames();
         for (const auto& driverName : vecDriverNames)
         {
             FileAttrInfo info;
@@ -236,8 +236,8 @@ void QtWidgetsApplication1::ShowFileList(const UINT64& ui64FileNum, const CStrin
     else
     {
         UINT uiDirNum = 0;
-        if (CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->SetCurDriverInfo(GetDriverNameByPath(strFilePath))
-            && CNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(ui64FileNum, vecFileInfos, uiDirNum, (BOOL)bForceRefresh))
+        if (QNTFSHelper::GetInstance() && QNTFSHelper::GetInstance()->SetCurDriverInfo(GetDriverNameByPath(strFilePath))
+            && QNTFSHelper::GetInstance()->GetAllChildInfosByParentRefNum(ui64FileNum, vecFileInfos, uiDirNum, (BOOL)bForceRefresh))
         {
         }
     }
@@ -250,7 +250,7 @@ void QtWidgetsApplication1::ShowFileList(const UINT64& ui64FileNum, const CStrin
 
     if (ui.label)
     {
-        QString str = CNTFSHelper::CStringToQString(strFilePath);
+        QString str = QNTFSHelper::CStringToQString(strFilePath);
         if (ui64FileNum == 5)
         {
             if (!str.contains(u8"\\"))
@@ -304,7 +304,7 @@ void QtWidgetsApplication1::keyReleaseEvent(QKeyEvent* ev)
                 TCHAR szParentPath[MAX_PATH + 1] = { 0 };
                 memcpy(szParentPath, m_strCurFilePath, m_strCurFilePath.GetLength() * 2);
                 PathRemoveFileSpec(szParentPath);
-                if (CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->GetParentFileNumByFileNum(m_ui64CurFileNum, ui64ParentFileNum))
+                if (QNTFSHelper::GetInstance() && QNTFSHelper::GetInstance()->GetParentFileNumByFileNum(m_ui64CurFileNum, ui64ParentFileNum))
                 {
                     ShowFileList(ui64ParentFileNum, szParentPath);
                 }
@@ -391,7 +391,7 @@ void QtWidgetsApplication1::slotTableCurrentItemChanged(const QModelIndex& curre
         {
             if (ui.label)
             {
-                QString str = CNTFSHelper::CStringToQString(fileAttrInfo.strFilePath);
+                QString str = QNTFSHelper::CStringToQString(fileAttrInfo.strFilePath);
                 if (fileAttrInfo.ui64FileUniNum == 5)
                 {
                     str += u8":\\";
@@ -420,6 +420,11 @@ void QtWidgetsApplication1::slotTableCurrentItemChanged(const QModelIndex& curre
     }
 }
 
+void QtWidgetsApplication1::slotCancelCopy()
+{
+    QNTFSHelper::GetInstance()->CancelCopyTask();
+}
+
 void QtWidgetsApplication1::slotMenuOpen()
 {
     if (ui.tableView && ui.tableView->selectionModel())
@@ -437,7 +442,7 @@ void QtWidgetsApplication1::slotMenuDel()
             FileAttrInfo attrInfo;
             if (m_pModelTable->GetAttrInfoByIndex(ui.tableView->selectionModel()->currentIndex(), attrInfo))
             {
-                if (QFile(CNTFSHelper::CStringToQString(attrInfo.strFilePath)).remove())
+                if (QFile(QNTFSHelper::CStringToQString(attrInfo.strFilePath)).remove())
                 {
                     ShowFileList(m_ui64CurFileNum, m_strCurFilePath, true);
                     QMessageBox::information(this, u8"提示", u8"文件删除完成！");
@@ -500,7 +505,7 @@ void QtWidgetsApplication1::slotMenuPaste()
     TCHAR szPath[MAX_PATH + 1] = { 0 };
     if (m_ui64CurFileNum == 5)
     {
-        CString strTmp = CNTFSHelper::GetInstance()->GetCurDriverName() + L":";
+        CString strTmp = QNTFSHelper::GetInstance()->GetCurDriverName() + L":";
         memcpy(szPath, strTmp, strTmp.GetLength() * 2);
     }
     else
@@ -559,23 +564,25 @@ void QtWidgetsApplication1::slotMenuPaste()
     {
         if (m_pProgressDlg == nullptr)
         {
-            m_pProgressDlg = new QProgressDialog(u8"拷贝中...", QString(), 0, 100, this, Qt::WindowTitleHint);
+            m_pProgressDlg = new QProgressDialog(u8"拷贝中...", "Cancel", 0, 100, this);
+            connect(m_pProgressDlg, &QProgressDialog::canceled, this, &QtWidgetsApplication1::slotCancelCopy);
         }
         m_pProgressDlg->setWindowModality(Qt::WindowModal);
+        m_pProgressDlg->showNormal();
 
-        if (CNTFSHelper::GetInstance())
+        if (QNTFSHelper::GetInstance())
         {
-            CNTFSHelper::GetInstance()->SetProgressWndHandle((HWND)winId());
-            CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath[0]);
-            bSuc = CNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
-            CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath)[0]);
+            QNTFSHelper::GetInstance()->SetProgressWndHandle((HWND)winId());
+            QNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath[0]);
+            bSuc = QNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
+            QNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath)[0]);
         }
     }
     else
     {
-        CNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath[0]);
-        bSuc = CNTFSHelper::GetInstance() && CNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
-        CNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath[0]));
+        QNTFSHelper::GetInstance()->SetCurDriverInfo(m_strSrcFilePath[0]);
+        bSuc = QNTFSHelper::GetInstance() && QNTFSHelper::GetInstance()->MyCopyFile(m_ui64SrcFileNum, m_ui64SrcFileSize, szPath);
+        QNTFSHelper::GetInstance()->SetCurDriverInfo(CString(szPath[0]));
     }
 
     if (bSuc)
@@ -583,6 +590,10 @@ void QtWidgetsApplication1::slotMenuPaste()
         if (m_bCut)
         {
             DeleteFile(m_strSrcFilePath);
+        }
+        if (m_pProgressDlg)
+        {
+            m_pProgressDlg->setValue(100);
         }
         ShowFileList(m_ui64CurFileNum, m_strCurFilePath, true);
         QMessageBox::information(this, u8"提示", u8"文件拷贝完成！");

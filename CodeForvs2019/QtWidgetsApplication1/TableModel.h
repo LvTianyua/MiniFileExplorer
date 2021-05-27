@@ -1,7 +1,7 @@
 #pragma once
 #include "stdafx.h"
-#include "common.h"
 #include "qabstractitemmodel.h"
+#include "INTFSHelper.h"
 
 class QTableModel : public QAbstractTableModel
 {

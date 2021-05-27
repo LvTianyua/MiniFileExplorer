@@ -31,7 +31,7 @@ QVariant QTreeModel::data(const QModelIndex &index, int role) const
         {
             CString strPath = pItem->data().value<FileAttrInfo>().strFilePath;
             strPath = PathFindFileName(strPath);
-            return CNTFSHelper::CStringToQString(strPath);
+            return QNTFSHelper::CStringToQString(strPath);
         }
         else if (role == Qt::DecorationRole)
         {

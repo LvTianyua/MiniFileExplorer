@@ -1,6 +1,5 @@
 #include "QtWidgetsApplication1.h"
 #include "stdafx.h"
-#include "common.h"
 #include "Dbghelp.h"
 #pragma comment(lib, "Dbghelp.lib")
 

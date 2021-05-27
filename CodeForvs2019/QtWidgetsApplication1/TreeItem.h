@@ -1,6 +1,6 @@
 #pragma once
 #include "QVariant"
-#include "common.h"
+#include "INTFSHelper.h"
 
 class QTreeItem
 {

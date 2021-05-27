@@ -1,6 +1,7 @@
 #include "TableModel.h"
 #include "NTFSHelper.h"
 #include "MyTableView.h"
+#pragma comment(lib, "QtClassLibrary1.lib")
 
 QTableModel::QTableModel(QObject *parent /*= nullptr*/)
     : QAbstractTableModel(parent)
@@ -23,7 +24,7 @@ QVariant QTableModel::data(const QModelIndex &index, int role) const
         {
             CString strPath = attrInfo.strFilePath;
             strPath = PathFindFileName(strPath);
-            return CNTFSHelper::CStringToQString(strPath);
+            return QNTFSHelper::CStringToQString(strPath);
         }
         case 1:
         {
@@ -122,7 +123,7 @@ QString QTableModel::TimeToString(const SYSTEMTIME& systemTime) const
     }
     CString strTmp;
     strTmp.Format(L"%02d/%02d/%02d %02d:%02d", systemTime.wYear, systemTime.wMonth, systemTime.wDay, systemTime.wHour, systemTime.wMinute);
-    return CNTFSHelper::CStringToQString(strTmp);
+    return QNTFSHelper::CStringToQString(strTmp);
 }
 
 QString QTableModel::SizeToString(const UINT64& ui64FileSize) const
