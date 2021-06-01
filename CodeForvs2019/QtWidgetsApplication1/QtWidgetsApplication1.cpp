@@ -4,15 +4,33 @@
 #include "NTFSHelper.h"
 #include "TableModel.h"
 #include "MyTableView.h"
+#include <windowsx.h>
 
 QtWidgetsApplication1::QtWidgetsApplication1(QWidget *parent)
     : QMainWindow(parent)
 {
     ui.setupUi(this);
 
+    InitBaseUI();
     InitTreeView();
     InitTableView();
     InitAction();
+}
+
+void QtWidgetsApplication1::InitBaseUI()
+{
+    setWindowFlags(Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground, true);
+
+    ui.widget->layout()->setMargin(0);
+    ui.widget_2->layout()->setMargin(0);
+    //ui.widget_3->layout()->setMargin(0);
+    ui.widget_4->layout()->setMargin(0);
+
+    ui.pushButton->setPicName(QString(":/QtWidgetsApplication1/res/min"));
+    connect(ui.pushButton, &QPushButton::clicked, this, &QtWidgetsApplication1::slotMinClicked);
+    ui.pushButton_2->setPicName(QString(":/QtWidgetsApplication1/res/close"));
+    connect(ui.pushButton_2, &QPushButton::clicked, this, &QtWidgetsApplication1::slotCloseClicked);
 }
 
 void QtWidgetsApplication1::InitTreeView()
@@ -335,24 +353,158 @@ void QtWidgetsApplication1::contextMenuEvent(QContextMenuEvent* event)
 bool QtWidgetsApplication1::nativeEvent(const QByteArray& eventType, void* message, long* result)
 {
     MSG* pMsg = static_cast<MSG*>(message);
-    if (pMsg && pMsg->message == MSG_UPDATE_PROGRESS)
+    if (pMsg)
     {
-        if (m_pProgressDlg)
+        if (pMsg->message == MSG_UPDATE_PROGRESS)
         {
-            if (m_pProgressDlg->wasCanceled())
+            if (m_pProgressDlg)
             {
-                QNTFSHelper::GetInstance()->CancelCopyTask();
-                return true;
+                if (m_pProgressDlg->wasCanceled())
+                {
+                    QNTFSHelper::GetInstance()->CancelCopyTask();
+                    return true;
+                }
+                if ((int)(double)pMsg->wParam > 99)
+                {
+                    pMsg->wParam = 99;
+                }
+                m_pProgressDlg->setValue((int)(double)pMsg->wParam);
             }
-            if ((int)(double)pMsg->wParam > 99)
-            {
-                pMsg->wParam = 99;
-            }
-            m_pProgressDlg->setValue((int)(double)pMsg->wParam);
+            return true;
         }
-        return true;
+        else if (pMsg->message == WM_NCHITTEST)
+        {
+            if (isMaximized())
+            {
+                return false;
+            }
+            int boundaryWidth = 4;
+            int xPos = GET_X_LPARAM(pMsg->lParam) - this->frameGeometry().x();
+            int yPos = GET_Y_LPARAM(pMsg->lParam) - this->frameGeometry().y();
+            if (xPos < boundaryWidth && yPos < boundaryWidth)                    //左上角
+                *result = HTTOPLEFT;
+            else if (xPos >= width() - boundaryWidth && yPos < boundaryWidth)          //右上角
+                *result = HTTOPRIGHT;
+            else if (xPos < boundaryWidth && yPos >= height() - boundaryWidth)         //左下角
+                *result = HTBOTTOMLEFT;
+            else if (xPos >= width() - boundaryWidth && yPos >= height() - boundaryWidth)//右下角
+                *result = HTBOTTOMRIGHT;
+            else if (xPos < boundaryWidth)                                     //左边
+                *result = HTLEFT;
+            else if (xPos >= width() - boundaryWidth)                              //右边
+                *result = HTRIGHT;
+            else if (yPos < boundaryWidth)                                       //上边
+                *result = HTTOP;
+            else if (yPos >= height() - boundaryWidth)                             //下边
+                *result = HTBOTTOM;
+            else              //其他部分不做处理，返回false，留给其他事件处理器处理
+                return false;
+            return true;
+        }
     }
     return false;
+}
+
+void QtWidgetsApplication1::paintEvent(QPaintEvent* event)
+{
+    if (!isMaximized())
+    {
+        // 设置圆角
+        QPainterPath path;
+        path.setFillRule(Qt::WindingFill);
+        path.addRoundedRect(10, 10, width() - 20, height() - 20, 5, 5);
+
+        // 设置背景颜色，抗锯齿
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.fillPath(path, QBrush(QColor(65, 65, 65)));
+
+        // 针对每个像素点，绘制阴影和圆角效果
+        QColor color(45, 45, 45, 50);
+        for (int i = 0; i < 5; i++)
+        {
+            QPainterPath path1;
+            path1.setFillRule(Qt::WindingFill);
+            path1.addRoundedRect(5 - i, 5 - i, width() - (5 - i) * 2, height() - (5 - i) * 2, 5, 5);
+            color.setAlpha(100 - qSqrt(i) * 50);
+            painter.setPen(color);
+            painter.drawPath(path1);
+        }
+
+        painter.setBrush(QBrush(QColor(245, 245, 245)));
+        painter.setPen(Qt::transparent);
+        QRect rc = rect();
+        rc.setX(5);
+        rc.setY(5);
+        rc.setWidth(rc.width() - 5);
+        rc.setHeight(rc.height() - 5);
+        // rect: 绘制区域  15：圆角弧度
+        painter.drawRoundedRect(rc, 5, 5);
+
+        // 绘制顶部widget
+        QPainterPath path1;
+        path1.setFillRule(Qt::WindingFill);
+        path1.addRoundedRect(5, 5, width() - 10, ui.widget_4->height() + 10, 5, 5);
+        path1.addRect(5, 5 + (ui.widget_4->height() + 10) / 2, width() - 10, (ui.widget_4->height() + 10) / 2 + 1);
+
+        // 设置背景颜色，抗锯齿
+        QPainter painter1(this);
+        painter1.setRenderHint(QPainter::Antialiasing, true);
+        painter1.fillPath(path1, QBrush(QColor(153, 209, 255)));
+    }
+    else
+    {
+        // 设置圆角
+        QPainterPath path;
+        path.setFillRule(Qt::WindingFill);
+        path.addRect(0, 0, width(), height());
+
+        // 设置背景颜色，抗锯齿
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.fillPath(path, QBrush(QColor(245, 245, 245)));
+
+        // 绘制顶部widget
+        QPainterPath path1;
+        path1.setFillRule(Qt::WindingFill);
+        path1.addRect(0, 0, width(), ui.widget_4->height() + 15);
+
+        // 设置背景颜色，抗锯齿
+        QPainter painter1(this);
+        painter1.setRenderHint(QPainter::Antialiasing, true);
+        painter1.fillPath(path1, QBrush(QColor(153, 209, 255)));
+    }
+}
+
+void QtWidgetsApplication1::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton)
+        m_movePt = event->pos();
+}
+
+void QtWidgetsApplication1::mouseMoveEvent(QMouseEvent* event)
+{
+    if (event->buttons() & Qt::LeftButton && !isMaximized())
+        move(event->pos() + pos() - m_movePt);
+}
+
+void QtWidgetsApplication1::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event->buttons() & Qt::LeftButton)
+    {
+        if (isMaximized())
+        {
+            if (!m_baGeometry.isNull())
+            {
+                restoreGeometry(m_baGeometry);
+            }
+        }
+        else
+        {
+            m_baGeometry = saveGeometry();
+            showMaximized();
+        }
+    }
 }
 
 void QtWidgetsApplication1::slotTreeCurrentItemChanged(const QModelIndex &current, const QModelIndex &previous)
@@ -427,6 +579,16 @@ void QtWidgetsApplication1::slotTableCurrentItemChanged(const QModelIndex& curre
             }
         }
     }
+}
+
+void QtWidgetsApplication1::slotMinClicked()
+{
+    showMinimized();
+}
+
+void QtWidgetsApplication1::slotCloseClicked()
+{
+    close();
 }
 
 void QtWidgetsApplication1::slotMenuOpen()

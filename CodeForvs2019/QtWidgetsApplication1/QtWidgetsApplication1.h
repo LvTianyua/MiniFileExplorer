@@ -12,6 +12,7 @@ public:
     explicit QtWidgetsApplication1(QWidget *parent = Q_NULLPTR);
 
 protected:
+    void InitBaseUI();
     void InitTreeView();
     void InitTableView();
     void InitAction();
@@ -25,12 +26,18 @@ protected:
     virtual void keyReleaseEvent(QKeyEvent* ev) override;
     virtual void contextMenuEvent(QContextMenuEvent* event) override;
     virtual bool nativeEvent(const QByteArray& eventType, void* message, long* result) override;
+    virtual void paintEvent(QPaintEvent* event) override;
+    virtual void mousePressEvent(QMouseEvent* event) override;
+    virtual void mouseMoveEvent(QMouseEvent* event) override;
+    virtual void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private slots:
     void slotTreeCurrentItemChanged(const QModelIndex &current, const QModelIndex &previous);
     void slotExpanded(const QModelIndex &current);
     void slotTableItemDBClicked(const QModelIndex& index);
     void slotTableCurrentItemChanged(const QModelIndex& current, const QModelIndex& previous);
+    void slotMinClicked();
+    void slotCloseClicked();
 
     // 右键菜单相关槽函数
     void slotMenuOpen();
@@ -56,4 +63,7 @@ private:
     CString m_strSrcFilePath;
 
     QProgressDialog* m_pProgressDlg = nullptr;
+
+    QPoint                  m_movePt;
+    QByteArray              m_baGeometry;
 };

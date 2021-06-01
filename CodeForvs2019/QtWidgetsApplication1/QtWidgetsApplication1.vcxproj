@@ -134,12 +134,14 @@
     </QtMoc>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="MyPushButton.cpp" />
     <ClCompile Include="MyTableView.cpp" />
     <ClCompile Include="TableModel.cpp" />
     <ClCompile Include="TreeItem.cpp" />
     <ClCompile Include="TreeModel.cpp" />
     <QtMoc Include="TableModel.h" />
     <QtMoc Include="MyTableView.h" />
+    <QtMoc Include="MyPushButton.h" />
     <ClInclude Include="TreeItem.h" />
     <QtMoc Include="TreeModel.h" />
     <QtRcc Include="QtWidgetsApplication1.qrc" />
