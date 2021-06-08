@@ -29,6 +29,7 @@ protected:
     virtual void paintEvent(QPaintEvent* event) override;
     virtual void mousePressEvent(QMouseEvent* event) override;
     virtual void mouseMoveEvent(QMouseEvent* event) override;
+    virtual void mouseReleaseEvent(QMouseEvent* event) override;
     virtual void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private slots:
@@ -65,5 +66,5 @@ private:
     QProgressDialog* m_pProgressDlg = nullptr;
 
     QPoint                  m_movePt;
-    QByteArray              m_baGeometry;
+    bool                    m_bPress = false;
 };

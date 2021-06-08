@@ -479,13 +479,26 @@ void QtWidgetsApplication1::paintEvent(QPaintEvent* event)
 void QtWidgetsApplication1::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton)
+    {
         m_movePt = event->pos();
+        m_bPress = true;
+    }
 }
 
 void QtWidgetsApplication1::mouseMoveEvent(QMouseEvent* event)
 {
-    if (event->buttons() & Qt::LeftButton && !isMaximized())
-        move(event->pos() + pos() - m_movePt);
+    if (event->buttons() & Qt::LeftButton && m_bPress)
+    {
+        if (!isMaximized())
+        {
+            move(event->globalPos() - m_movePt);
+        }
+    }
+}
+
+void QtWidgetsApplication1::mouseReleaseEvent(QMouseEvent* event)
+{
+    m_bPress = false;
 }
 
 void QtWidgetsApplication1::mouseDoubleClickEvent(QMouseEvent* event)
@@ -494,14 +507,10 @@ void QtWidgetsApplication1::mouseDoubleClickEvent(QMouseEvent* event)
     {
         if (isMaximized())
         {
-            if (!m_baGeometry.isNull())
-            {
-                restoreGeometry(m_baGeometry);
-            }
+            showNormal();
         }
         else
         {
-            m_baGeometry = saveGeometry();
             showMaximized();
         }
     }

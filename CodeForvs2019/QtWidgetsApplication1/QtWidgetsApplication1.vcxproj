@@ -142,6 +142,8 @@
     <QtMoc Include="TableModel.h" />
     <QtMoc Include="MyTableView.h" />
     <QtMoc Include="MyPushButton.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="resource1.h" />
     <ClInclude Include="TreeItem.h" />
     <QtMoc Include="TreeModel.h" />
     <QtRcc Include="QtWidgetsApplication1.qrc" />
@@ -154,6 +156,12 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="MiniFileExplorer1.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\myico.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
